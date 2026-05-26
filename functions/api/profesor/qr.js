@@ -54,9 +54,9 @@ async function handleGet(request, env, user) {
 
     // Check if there's an active session for this horario today
     const activeSession = await env.DB.prepare(
-      `SELECT * FROM attendance_sessions WHERE horario_id = ? AND profesor_id = ? AND DATE(fecha) = ? AND estado = 'en_curso'`
+      `SELECT * FROM attendance_sessions WHERE horario_id = ? AND DATE(fecha_inicio) = ? AND estado = 'activa'`
     )
-      .bind(horario_id, user.id, today)
+      .bind(horario_id, today)
       .first();
 
     let session;
@@ -67,15 +67,13 @@ async function handleGet(request, env, user) {
       session = activeSession;
     } else {
       // Create a new session
-      const now = new Date();
-      const horaInicio = now.toTimeString().split(' ')[0];
       const codigo = randomCode(8);
 
       const result = await env.DB.prepare(
-        `INSERT INTO attendance_sessions (horario_id, profesor_id, fecha, hora_inicio, estado, qr_code, fecha_creacion)
-         VALUES (?, ?, ?, ?, 'en_curso', ?, datetime("now"))`
+        `INSERT INTO attendance_sessions (horario_id, profesor_id, estado, qr_code, fecha_inicio)
+         VALUES (?, ?, 'activa', ?, datetime("now"))`
       )
-        .bind(horario_id, user.id, today, horaInicio, codigo)
+        .bind(horario_id, user.id, codigo)
         .run();
 
       session = await env.DB.prepare('SELECT * FROM attendance_sessions WHERE id = ?').bind(result.meta.last_row_id).first();
@@ -94,7 +92,7 @@ async function handleGet(request, env, user) {
     const encodedData = encodeURIComponent(qrData);
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodedData}`;
 
-    // Update session qr_code field if it doesn't have one or was just created
+    // Update session qr_code field if it doesn't have one
     if (!session.qr_code) {
       const codigo = randomCode(8);
       await env.DB.prepare('UPDATE attendance_sessions SET qr_code = ? WHERE id = ?').bind(codigo, session.id).run();
@@ -105,8 +103,7 @@ async function handleGet(request, env, user) {
         id: session.id,
         horario_id: session.horario_id,
         profesor_id: session.profesor_id,
-        fecha: session.fecha,
-        hora_inicio: session.hora_inicio,
+        fecha_inicio: session.fecha_inicio,
         estado: session.estado,
         qr_code: session.qr_code,
       },

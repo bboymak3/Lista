@@ -16,11 +16,11 @@ function checkProfesor(user) {
   return user && (user.rol === 'profesor' || user.rol === 'admin');
 }
 
-// Map JS day (0=Sunday) to database dia_semana
+// Map JS day (0=Sunday) to database dia_semana (1=Lunes, 7=Domingo)
 function getDiaSemana() {
-  const days = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
-  const jsDay = new Date().getDay();
-  return days[jsDay];
+  const jsDay = new Date().getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+  // Convert: JS 0(Sun)->7, 1(Mon)->1, 2(Tue)->2, 3(Wed)->3, 4(Thu)->4, 5(Fri)->5, 6(Sat)->6
+  return jsDay === 0 ? 7 : jsDay;
 }
 
 // GET - Get professor's schedules for today with student count, or session history

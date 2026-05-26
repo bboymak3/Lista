@@ -1,6 +1,7 @@
 -- ============================================
 -- SISTEMA DE CONTROL DE ASISTENCIAS ESCOLAR
--- Base de Datos D1 (SQLite) - v2 COMPLETO
+-- Base de Datos D1 (SQLite) - v3 CORREGIDO
+-- Alineado con el código API
 -- ============================================
 
 -- Tabla de Usuarios (Admin, Profesor, Representante, Estudiante)
@@ -10,7 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
   nombre TEXT NOT NULL,
   apellido TEXT NOT NULL,
   email TEXT UNIQUE,
-  password_hash TEXT NOT NULL,
+  password TEXT NOT NULL,
   rol TEXT NOT NULL,
   telefono TEXT,
   foto_key TEXT,
@@ -35,7 +36,8 @@ CREATE TABLE IF NOT EXISTS students (
   turno TEXT,
   direccion TEXT,
   telefono_emergencia TEXT,
-  foto_key TEXT,
+  contacto_emergencia TEXT,
+  foto TEXT,
   qr_code TEXT UNIQUE NOT NULL,
   activo INTEGER DEFAULT 1,
   fecha_creacion TEXT DEFAULT (datetime('now')),
@@ -85,7 +87,7 @@ CREATE TABLE IF NOT EXISTS schedules (
   hora_inicio TEXT NOT NULL,
   hora_fin TEXT NOT NULL,
   aula TEXT,
-  periodo_escolar TEXT NOT NULL,
+  periodo_escolar TEXT DEFAULT '2024-2025',
   qr_code TEXT,
   activo INTEGER DEFAULT 1,
   fecha_creacion TEXT DEFAULT (datetime('now')),
@@ -105,15 +107,14 @@ CREATE TABLE IF NOT EXISTS schedule_students (
   UNIQUE(horario_id, estudiante_id)
 );
 
--- Tabla de Sesiones de Asistencia
+-- Tabla de Sesiones de Asistencia (alineada con el código API)
 CREATE TABLE IF NOT EXISTS attendance_sessions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   horario_id INTEGER NOT NULL,
-  profesor_id INTEGER NOT NULL,
-  fecha TEXT NOT NULL,
-  hora_inicio TEXT NOT NULL,
-  hora_fin TEXT,
-  estado TEXT DEFAULT 'en_curso' CHECK(estado IN ('en_curso', 'finalizada', 'cancelada')),
+  profesor_id INTEGER,
+  fecha_inicio TEXT DEFAULT (datetime('now')),
+  fecha_fin TEXT,
+  estado TEXT DEFAULT 'activa' CHECK(estado IN ('activa', 'cerrada', 'cancelada')),
   qr_code TEXT,
   latitud REAL,
   longitud REAL,
@@ -123,18 +124,16 @@ CREATE TABLE IF NOT EXISTS attendance_sessions (
   FOREIGN KEY (profesor_id) REFERENCES users(id)
 );
 
--- Tabla de Registros de Asistencia
+-- Tabla de Registros de Asistencia (alineada con el código API)
 CREATE TABLE IF NOT EXISTS attendance_records (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   sesion_id INTEGER NOT NULL,
   estudiante_id INTEGER NOT NULL,
   estado TEXT NOT NULL CHECK(estado IN ('presente', 'ausente', 'tardanza', 'justificado')),
-  observaciones TEXT,
-  hora_registro TEXT DEFAULT (datetime('now')),
-  registrado_por INTEGER NOT NULL,
+  observacion TEXT,
+  fecha_registro TEXT DEFAULT (datetime('now')),
   FOREIGN KEY (sesion_id) REFERENCES attendance_sessions(id),
   FOREIGN KEY (estudiante_id) REFERENCES students(id),
-  FOREIGN KEY (registrado_por) REFERENCES users(id),
   UNIQUE(sesion_id, estudiante_id)
 );
 
@@ -159,8 +158,8 @@ CREATE TABLE IF NOT EXISTS school_config (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   nombre TEXT NOT NULL,
   direccion TEXT,
-  latitud REAL NOT NULL,
-  longitud REAL NOT NULL,
+  latitud REAL NOT NULL DEFAULT 0,
+  longitud REAL NOT NULL DEFAULT 0,
   radio_permitido INTEGER DEFAULT 150,
   telefono TEXT,
   codigo_postal TEXT,
@@ -261,7 +260,7 @@ CREATE INDEX IF NOT EXISTS idx_students_qr ON students(qr_code);
 CREATE INDEX IF NOT EXISTS idx_students_grado_seccion ON students(grado, seccion);
 CREATE INDEX IF NOT EXISTS idx_schedules_profesor ON schedules(profesor_id);
 CREATE INDEX IF NOT EXISTS idx_schedules_dia ON schedules(dia_semana);
-CREATE INDEX IF NOT EXISTS idx_attendance_sessions_fecha ON attendance_sessions(fecha);
+CREATE INDEX IF NOT EXISTS idx_attendance_sessions_fecha ON attendance_sessions(fecha_inicio);
 CREATE INDEX IF NOT EXISTS idx_attendance_records_estudiante ON attendance_records(estudiante_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_representante ON notifications(representante_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_leida ON notifications(leida);

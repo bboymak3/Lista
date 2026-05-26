@@ -181,7 +181,7 @@ async function handlePost(request, env, user) {
 
     try {
       await env.DB.prepare(
-        `INSERT OR IGNORE INTO users (cedula, nombre, apellido, email, password_hash, rol, telefono, activo, estudiante_id)
+        `INSERT OR IGNORE INTO users (cedula, nombre, apellido, email, password, rol, telefono, activo, estudiante_id)
          VALUES (?, ?, ?, ?, ?, 'estudiante', ?, 1, ?)`
       ).bind(
         studentCedula,
@@ -203,7 +203,7 @@ async function handlePost(request, env, user) {
 
     try {
       await env.DB.prepare(
-        `INSERT OR IGNORE INTO users (cedula, nombre, apellido, email, password_hash, rol, telefono, activo)
+        `INSERT OR IGNORE INTO users (cedula, nombre, apellido, email, password, rol, telefono, activo)
          VALUES (?, ?, ?, ?, ?, 'representante', ?, 1)`
       ).bind(
         repCedula,

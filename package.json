@@ -1,0 +1,17 @@
+{
+  "name": "sistema-asistencia-escolar",
+  "version": "1.0.0",
+  "description": "Sistema de Control de Asistencias Escolar - Cloudflare Pages + D1 + R2",
+  "private": true,
+  "scripts": {
+    "dev": "npx wrangler pages dev public --compatibility-date 2024-01-01 --d1 DB=sistema-asistencia-db --r2 BUCKET=sistema-asistencia-fotos",
+    "deploy": "npx wrangler pages deploy public --project-name sistema-asistencia-escolar",
+    "db:create": "npx wrangler d1 create sistema-asistencia-db",
+    "db:migrate": "npx wrangler d1 execute sistema-asistencia-db --file=./schema.sql",
+    "db:seed": "npx wrangler d1 execute sistema-asistencia-db --file=./seed.sql",
+    "r2:create": "npx wrangler r2 bucket create sistema-asistencia-fotos"
+  },
+  "devDependencies": {
+    "wrangler": "^3.99.0"
+  }
+}

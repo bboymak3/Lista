@@ -7,6 +7,7 @@ binding = "DB"
 database_name = "sistema-asistencia-db"
 database_id = "25b87c1b-c6fd-4dfc-8858-5a25388723a6"
 
-[[r2_buckets]]
-binding = "BUCKET"
-bucket_name = "sistema-asistencia-fotos"
+# R2 bucket - descomentar cuando el bucket sea creado manualmente en Cloudflare Dashboard
+# [[r2_buckets]]
+# binding = "BUCKET"
+# bucket_name = "sistema-asistencia-fotos"

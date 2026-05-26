@@ -5,7 +5,7 @@ pages_build_output_dir = "public"
 [[d1_databases]]
 binding = "DB"
 database_name = "sistema-asistencia-db"
-database_id = "REEMPLAZAR_CON_TU_DATABASE_ID"
+database_id = "25b87c1b-c6fd-4dfc-8858-5a25388723a6"
 
 [[r2_buckets]]
 binding = "BUCKET"

@@ -34,19 +34,14 @@ async function handleGet(request, env, user) {
 
     // If user is a student, they can only see their own data
     if (user.rol === 'estudiante') {
-      // First check if estudiante_id is stored on the user record
-      if (user.estudiante_id) {
-        targetStudentId = user.estudiante_id;
+      // Look up student by user's cedula or linked account
+      const student = await env.DB.prepare('SELECT id FROM students WHERE cedula_escolar = ? OR user_id = ?')
+        .bind(user.cedula, user.id)
+        .first();
+      if (student) {
+        targetStudentId = student.id;
       } else {
-        // Fallback: Look up student by user's cedula matching cedula_escolar
-        const student = await env.DB.prepare('SELECT id FROM students WHERE cedula_escolar = ?')
-          .bind(user.cedula)
-          .first();
-        if (student) {
-          targetStudentId = student.id;
-        } else {
-          return jsonResponse({ error: 'Estudiante no encontrado para este usuario' }, 404);
-        }
+        return jsonResponse({ error: 'Estudiante no encontrado para este usuario' }, 404);
       }
     }
 
@@ -70,8 +65,8 @@ async function handleGet(request, env, user) {
     if (action === 'carnet') {
       // Get student carnet data
       const student = await env.DB.prepare(
-        `SELECT id, cedula_escolar, nombre, apellido, fecha_nacimiento, grado, seccion, turno,
-                direccion, telefono_emergencia, codigo_unico, qr_code, foto_key
+        `SELECT id, cedula_escolar, nombre, apellido, fecha_nacimiento, grado, seccion,
+                direccion, telefono_emergencia, contacto_emergencia, codigo_unico, qr_code, foto
          FROM students WHERE id = ? AND activo = 1`
       )
         .bind(targetStudentId)
@@ -128,92 +123,13 @@ async function handleGet(request, env, user) {
   }
 }
 
-// POST - Scan professor QR to mark attendance
-async function handlePost(request, env, user) {
-  if (!user || user.rol !== 'estudiante') {
-    return jsonResponse({ error: 'Solo estudiantes pueden escanear asistencia' }, 403);
-  }
-
-  try {
-    const body = await request.json();
-    const { action, qr_data } = body;
-
-    // Scan professor QR to mark own attendance
-    if (action === 'escanear_asistencia' || qr_data) {
-      // Parse the QR data from the professor
-      let sesionId = null;
-      try {
-        const parsed = JSON.parse(qr_data);
-        sesionId = parsed.sesion_id || parsed.session_id;
-      } catch(e) {
-        // Try as plain session ID
-        sesionId = parseInt(qr_data);
-      }
-
-      if (!sesionId) {
-        return jsonResponse({ error: 'Código QR inválido. No se pudo identificar la sesión.' }, 400);
-      }
-
-      // Verify session exists and is active
-      const session = await env.DB.prepare(
-        'SELECT id, estado, horario_id FROM attendance_sessions WHERE id = ? AND estado IN (?, ?)'
-      ).bind(sesionId, 'en_curso', 'activa').first();
-
-      if (!session) {
-        return jsonResponse({ error: 'Sesión de clase no encontrada o ya finalizada' }, 404);
-      }
-
-      // Find the student
-      let student;
-      if (user.estudiante_id) {
-        student = await env.DB.prepare(
-          'SELECT id, codigo_unico, qr_code FROM students WHERE id = ? AND activo = 1'
-        ).bind(user.estudiante_id).first();
-      } else {
-        student = await env.DB.prepare(
-          'SELECT id, codigo_unico, qr_code FROM students WHERE cedula_escolar = ? AND activo = 1'
-        ).bind(user.cedula).first();
-      }
-
-      if (!student) {
-        return jsonResponse({ error: 'Estudiante no encontrado' }, 404);
-      }
-
-      // Verify student is assigned to this schedule
-      const assigned = await env.DB.prepare(
-        'SELECT id FROM schedule_students WHERE horario_id = ? AND estudiante_id = ?'
-      ).bind(session.horario_id, student.id).first();
-
-      if (!assigned) {
-        return jsonResponse({ error: 'No estás asignado a esta clase' }, 403);
-      }
-
-      // Upsert attendance record
-      await env.DB.prepare(
-        `INSERT INTO attendance_records (sesion_id, estudiante_id, estado, hora_registro, registrado_por)
-         VALUES (?, ?, 'presente', datetime('now'), ?)
-         ON CONFLICT(sesion_id, estudiante_id) DO UPDATE SET estado = 'presente', hora_registro = datetime('now')`
-      ).bind(sesionId, student.id, user.id).run();
-
-      return jsonResponse({ success: true, message: 'Asistencia registrada exitosamente', estado: 'presente' });
-    }
-
-    return jsonResponse({ error: 'Acción no válida' }, 400);
-  } catch (error) {
-    console.error('Scan attendance error:', error);
-    return jsonResponse({ error: 'Error al registrar asistencia por QR' }, 500);
-  }
-}
-
 export async function onRequest(context) {
   const { request, env } = context;
   const user = context.data?.user;
 
-  if (request.method === 'GET') {
-    return handleGet(request, env, user);
-  } else if (request.method === 'POST') {
-    return handlePost(request, env, user);
+  if (request.method !== 'GET') {
+    return jsonResponse({ error: 'Método no permitido' }, 405);
   }
 
-  return jsonResponse({ error: 'Método no permitido' }, 405);
+  return handleGet(request, env, user);
 }

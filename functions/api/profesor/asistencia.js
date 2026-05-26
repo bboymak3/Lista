@@ -40,20 +40,26 @@ async function handleStartSession(request, env, user) {
       return jsonResponse({ error: 'ID de horario es requerido' }, 400);
     }
 
-    // Validate geolocation against school_config (soft validation - warn but allow)
-    let geoWarning = null;
-    let schoolCoords = null;
-    if (latitud !== undefined && longitud !== undefined) {
-      const schoolConfig = await env.DB.prepare(
-        'SELECT latitud, longitud, radio_permitido FROM school_config ORDER BY id ASC LIMIT 1'
-      ).first();
+    // Validate geolocation - OPTIONAL: only validate if coordinates provided AND school_config exists
+    if (latitud !== undefined && longitud !== undefined && latitud !== null && longitud !== null) {
+      try {
+        const schoolConfig = await env.DB.prepare(
+          'SELECT latitud, longitud, radio_permitido FROM school_config ORDER BY id ASC LIMIT 1'
+        ).first();
 
-      if (schoolConfig) {
-        schoolCoords = { latitud: schoolConfig.latitud, longitud: schoolConfig.longitud, radio_permitido: schoolConfig.radio_permitido };
-        const distance = haversineDistance(latitud, longitud, schoolConfig.latitud, schoolConfig.longitud);
-        if (distance > schoolConfig.radio_permitido) {
-          geoWarning = `Fuera del rango permitido. Distancia: ${Math.round(distance)}m, permitido: ${schoolConfig.radio_permitido}m`;
+        if (schoolConfig && schoolConfig.latitud && schoolConfig.longitud) {
+          const distance = haversineDistance(latitud, longitud, schoolConfig.latitud, schoolConfig.longitud);
+          if (distance > schoolConfig.radio_permitido) {
+            return jsonResponse({
+              error: `Fuera del rango permitido. Distancia: ${Math.round(distance)}m, permitido: ${schoolConfig.radio_permitido}m`,
+              distancia: Math.round(distance),
+              radio_permitido: schoolConfig.radio_permitido,
+            }, 403);
+          }
         }
+      } catch (geoError) {
+        console.error('Geolocation validation error (non-blocking):', geoError);
+        // Continue without geolocation validation if there's an error
       }
     }
 
@@ -71,31 +77,30 @@ async function handleStartSession(request, env, user) {
     // Check if there's already an active session for this schedule today
     const today = new Date().toISOString().split('T')[0];
     const existingSession = await env.DB.prepare(
-      `SELECT id FROM attendance_sessions WHERE horario_id = ? AND estado = 'en_curso' AND fecha = ?`
+      `SELECT id FROM attendance_sessions WHERE horario_id = ? AND estado = 'activa' AND DATE(fecha_inicio) = ?`
     )
       .bind(horario_id, today)
       .first();
 
     if (existingSession) {
-      return jsonResponse({ error: 'Ya existe una sesión activa para este horario hoy', sesion_id: existingSession.id }, 400);
+      // Return the existing session instead of erroring
+      const session = await env.DB.prepare('SELECT * FROM attendance_sessions WHERE id = ?')
+        .bind(existingSession.id)
+        .first();
+      return jsonResponse({ sesion: session, message: 'Sesión de asistencia ya estaba activa' });
     }
 
     const result = await env.DB.prepare(
-      `INSERT INTO attendance_sessions (horario_id, profesor_id, fecha, hora_inicio, estado, latitud, longitud) VALUES (?, ?, ?, ?, 'en_curso', ?, ?)`
+      `INSERT INTO attendance_sessions (horario_id, estado, fecha_inicio) VALUES (?, 'activa', datetime("now"))`
     )
-      .bind(horario_id, user.id, today, new Date().toTimeString().split(' ')[0], latitud, longitud)
+      .bind(horario_id)
       .run();
 
     const session = await env.DB.prepare('SELECT * FROM attendance_sessions WHERE id = ?')
       .bind(result.meta.last_row_id)
       .first();
 
-    return jsonResponse({
-      sesion: session,
-      message: 'Sesión de asistencia iniciada',
-      geoWarning: geoWarning || undefined,
-      schoolCoords: schoolCoords || undefined,
-    }, 201);
+    return jsonResponse({ sesion: session, message: 'Sesión de asistencia iniciada' }, 201);
   } catch (error) {
     console.error('Start session error:', error);
     return jsonResponse({ error: 'Error al iniciar sesión de asistencia' }, 500);
@@ -118,8 +123,10 @@ async function handleGetStudents(request, env, user) {
 
     // Validate session
     const session = await env.DB.prepare(
-      `SELECT ats.*, s.profesor_id FROM attendance_sessions ats
+      `SELECT ats.*, s.profesor_id, s.materia_id, sub.nombre as materia_nombre
+       FROM attendance_sessions ats
        INNER JOIN schedules s ON ats.horario_id = s.id
+       LEFT JOIN subjects sub ON s.materia_id = sub.id
        WHERE ats.id = ?`
     )
       .bind(sesion_id)
@@ -135,8 +142,9 @@ async function handleGetStudents(request, env, user) {
 
     // Get students assigned to this schedule
     const { results } = await env.DB.prepare(
-      `SELECT s.id, s.nombre, s.apellido, s.codigo_unico, s.grado, s.seccion, s.foto_key,
-              COALESCE(ar.estado, 'sin_registro') as estado_asistencia
+      `SELECT s.id, s.nombre, s.apellido, s.codigo_unico, s.grado, s.seccion, s.foto,
+              COALESCE(ar.estado, 'sin_registro') as estado_asistencia,
+              ar.id as registro_id
        FROM schedule_students ss
        INNER JOIN students s ON ss.estudiante_id = s.id
        LEFT JOIN attendance_records ar ON ar.estudiante_id = s.id AND ar.sesion_id = ?
@@ -184,9 +192,9 @@ async function handleRecordAttendance(request, env, user) {
       return jsonResponse({ error: 'No tiene acceso a esta sesión' }, 403);
     }
 
-    if (session.estado !== 'en_curso') {
-      return jsonResponse({ error: 'La sesión no está activa' }, 400);
-    }
+    // Allow recording even on closed sessions (for late corrections)
+    // but warn if session is not active
+    const sessionActive = session.estado === 'activa';
 
     const validStates = ['presente', 'ausente', 'tardanza', 'justificado'];
     const recorded = [];
@@ -219,30 +227,33 @@ async function handleRecordAttendance(request, env, user) {
 
       // Upsert attendance record
       const existingRecord = await env.DB.prepare(
-        'SELECT id FROM attendance_records WHERE sesion_id = ? AND estudiante_id = ?'
+        'SELECT id, estado FROM attendance_records WHERE sesion_id = ? AND estudiante_id = ?'
       )
         .bind(sesion_id, estudiante_id)
         .first();
 
+      const previousState = existingRecord?.estado || null;
+
       if (existingRecord) {
         // Update existing record
         await env.DB.prepare(
-          'UPDATE attendance_records SET estado = ?, observaciones = ? WHERE id = ?'
+          'UPDATE attendance_records SET estado = ?, observacion = ?, fecha_registro = datetime("now") WHERE id = ?'
         )
           .bind(estado, observacion || null, existingRecord.id)
           .run();
       } else {
         // Create new record
         await env.DB.prepare(
-          `INSERT INTO attendance_records (sesion_id, estudiante_id, estado, observaciones, registrado_por)
-           VALUES (?, ?, ?, ?, ?)`
+          `INSERT INTO attendance_records (sesion_id, estudiante_id, estado, observacion, fecha_registro)
+           VALUES (?, ?, ?, ?, datetime("now"))`
         )
-          .bind(sesion_id, estudiante_id, estado, observacion || null, user.id)
+          .bind(sesion_id, estudiante_id, estado, observacion || null)
           .run();
       }
 
       // Create notification for ausente or tardanza
-      if (estado === 'ausente' || estado === 'tardanza') {
+      // Only create notification if the state changed to ausente (not if already was ausente)
+      if (estado === 'ausente' && previousState !== 'ausente') {
         try {
           // Find parents of this student
           const { results: parents } = await env.DB.prepare(
@@ -258,28 +269,56 @@ async function handleRecordAttendance(request, env, user) {
             .bind(estudiante_id)
             .first();
 
-          const estadoText = estado === 'ausente' ? 'ausente' : 'con tardanza';
           const materia = await env.DB.prepare('SELECT nombre FROM subjects WHERE id = ?')
             .bind(session.materia_id)
             .first();
 
-          const titulo = estado === 'ausente'
-            ? `Ausencia de ${student.nombre} ${student.apellido}`
-            : `Tardanza de ${student.nombre} ${student.apellido}`;
-
-          const mensaje = `Se informa que el/la estudiante ${student.nombre} ${student.apellido} ha sido registrado/a ${estadoText} en la materia de ${materia?.nombre || 'N/A'} el día de hoy.`;
+          const titulo = `Ausencia de ${student?.nombre || ''} ${student?.apellido || ''}`;
+          const mensaje = `Se informa que el/la estudiante ${student?.nombre || ''} ${student?.apellido || ''} ha sido registrado/a como AUSENTE en la materia de ${materia?.nombre || 'N/A'} el día de hoy.`;
 
           for (const parent of parents) {
             await env.DB.prepare(
               `INSERT INTO notifications (representante_id, estudiante_id, sesion_id, tipo, titulo, mensaje, leida, fecha_creacion)
-               VALUES (?, ?, ?, ?, ?, ?, 0, datetime("now"))`
+               VALUES (?, ?, ?, 'ausencia', ?, ?, 0, datetime("now"))`
             )
-              .bind(parent.id, estudiante_id, sesion_id, estado, titulo, mensaje)
+              .bind(parent.id, estudiante_id, sesion_id, titulo, mensaje)
               .run();
           }
         } catch (notifError) {
           console.error('Notification creation error:', notifError);
           // Don't fail the whole request for notification errors
+        }
+      } else if (estado === 'tardanza' && previousState !== 'tardanza') {
+        try {
+          const { results: parents } = await env.DB.prepare(
+            `SELECT u.id, u.nombre, u.apellido FROM parent_student ps
+             INNER JOIN users u ON ps.representante_id = u.id
+             WHERE ps.estudiante_id = ? AND u.activo = 1`
+          )
+            .bind(estudiante_id)
+            .all();
+
+          const student = await env.DB.prepare('SELECT nombre, apellido FROM students WHERE id = ?')
+            .bind(estudiante_id)
+            .first();
+
+          const materia = await env.DB.prepare('SELECT nombre FROM subjects WHERE id = ?')
+            .bind(session.materia_id)
+            .first();
+
+          const titulo = `Tardanza de ${student?.nombre || ''} ${student?.apellido || ''}`;
+          const mensaje = `Se informa que el/la estudiante ${student?.nombre || ''} ${student?.apellido || ''} ha sido registrado/a con TARDANZA en la materia de ${materia?.nombre || 'N/A'} el día de hoy.`;
+
+          for (const parent of parents) {
+            await env.DB.prepare(
+              `INSERT INTO notifications (representante_id, estudiante_id, sesion_id, tipo, titulo, mensaje, leida, fecha_creacion)
+               VALUES (?, ?, ?, 'tardanza', ?, ?, 0, datetime("now"))`
+            )
+              .bind(parent.id, estudiante_id, sesion_id, titulo, mensaje)
+              .run();
+          }
+        } catch (notifError) {
+          console.error('Notification creation error:', notifError);
         }
       }
 
@@ -290,6 +329,7 @@ async function handleRecordAttendance(request, env, user) {
       message: `${recorded.length} registro(s) de asistencia guardado(s)`,
       registrados: recorded,
       errores: errors.length > 0 ? errors : undefined,
+      sesion_activa: sessionActive,
     });
   } catch (error) {
     console.error('Record attendance error:', error);
@@ -328,21 +368,77 @@ async function handleEndSession(request, env, user) {
       return jsonResponse({ error: 'No tiene acceso a esta sesión' }, 403);
     }
 
-    if (session.estado !== 'en_curso') {
+    if (session.estado !== 'activa') {
       return jsonResponse({ error: 'La sesión ya no está activa' }, 400);
     }
 
-    await env.DB.prepare(
-      `UPDATE attendance_sessions SET estado = 'finalizada', hora_fin = ? WHERE id = ?`
+    // Auto-mark all unmarked students as "ausente" before closing
+    const { results: unmarkedStudents } = await env.DB.prepare(
+      `SELECT ss.estudiante_id FROM schedule_students ss
+       LEFT JOIN attendance_records ar ON ar.estudiante_id = ss.estudiante_id AND ar.sesion_id = ?
+       WHERE ss.horario_id = ? AND ar.id IS NULL`
     )
-      .bind(new Date().toTimeString().split(' ')[0], sesion_id)
+      .bind(sesion_id, session.horario_id)
+      .all();
+
+    // Mark unmarked students as ausente and send notifications
+    for (const us of unmarkedStudents) {
+      await env.DB.prepare(
+        `INSERT INTO attendance_records (sesion_id, estudiante_id, estado, observacion, fecha_registro)
+         VALUES (?, ?, 'ausente', 'No marcado por el profesor', datetime("now"))`
+      )
+        .bind(sesion_id, us.estudiante_id)
+        .run();
+
+      // Send notification to parents
+      try {
+        const { results: parents } = await env.DB.prepare(
+          `SELECT u.id FROM parent_student ps
+           INNER JOIN users u ON ps.representante_id = u.id
+           WHERE ps.estudiante_id = ? AND u.activo = 1`
+        )
+          .bind(us.estudiante_id)
+          .all();
+
+        const student = await env.DB.prepare('SELECT nombre, apellido FROM students WHERE id = ?')
+          .bind(us.estudiante_id)
+          .first();
+
+        const materia = await env.DB.prepare('SELECT nombre FROM subjects WHERE id = ?')
+          .bind(session.materia_id)
+          .first();
+
+        const titulo = `Ausencia de ${student?.nombre || ''} ${student?.apellido || ''}`;
+        const mensaje = `Se informa que el/la estudiante ${student?.nombre || ''} ${student?.apellido || ''} fue registrado/a como AUSENTE en la materia de ${materia?.nombre || 'N/A'} (clase finalizada).`;
+
+        for (const parent of parents) {
+          await env.DB.prepare(
+            `INSERT INTO notifications (representante_id, estudiante_id, sesion_id, tipo, titulo, mensaje, leida, fecha_creacion)
+             VALUES (?, ?, ?, 'ausencia', ?, ?, 0, datetime("now"))`
+          )
+            .bind(parent.id, us.estudiante_id, sesion_id, titulo, mensaje)
+            .run();
+        }
+      } catch (notifError) {
+        console.error('Notification error for unmarked student:', notifError);
+      }
+    }
+
+    await env.DB.prepare(
+      `UPDATE attendance_sessions SET estado = 'cerrada', fecha_fin = datetime("now") WHERE id = ?`
+    )
+      .bind(sesion_id)
       .run();
 
     const updatedSession = await env.DB.prepare('SELECT * FROM attendance_sessions WHERE id = ?')
       .bind(sesion_id)
       .first();
 
-    return jsonResponse({ sesion: updatedSession, message: 'Sesión de asistencia cerrada' });
+    return jsonResponse({
+      sesion: updatedSession,
+      message: 'Sesión de asistencia cerrada',
+      auto_marked_ausente: unmarkedStudents.length,
+    });
   } catch (error) {
     console.error('End session error:', error);
     return jsonResponse({ error: 'Error al cerrar sesión de asistencia' }, 500);

@@ -151,8 +151,8 @@ async function handlePost(request, env, user) {
     }
 
     const result = await env.DB.prepare(
-      `INSERT INTO students (cedula_escolar, nombre, apellido, fecha_nacimiento, grado, seccion, turno, direccion, telefono_emergencia, codigo_unico, qr_code, foto_key, activo)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`
+      `INSERT INTO students (cedula_escolar, nombre, apellido, fecha_nacimiento, grado, seccion, direccion, telefono_emergencia, contacto_emergencia, codigo_unico, qr_code, foto, activo, fecha_creacion)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, datetime("now"))`
     )
       .bind(
         cedula_escolar || null,
@@ -161,9 +161,9 @@ async function handlePost(request, env, user) {
         fecha_nacimiento || null,
         grado,
         seccion,
-        body.turno || null,
         direccion || null,
         telefono_emergencia || null,
+        contacto_emergencia || null,
         codigo_unico,
         qr_code,
         fotoKey
@@ -294,7 +294,7 @@ async function handlePut(request, env, user) {
       return jsonResponse({ error: 'Estudiante no encontrado' }, 404);
     }
 
-    let fotoKey = existing.foto_key;
+    let fotoKey = existing.foto;
     if (foto) {
       try {
         const base64Data = foto.split(',')[1] || foto;
@@ -308,8 +308,8 @@ async function handlePut(request, env, user) {
           httpMetadata: { contentType: 'image/jpeg' },
         });
         // Delete old photo from R2
-        if (existing.foto_key) {
-          await env.BUCKET.delete(existing.foto_key);
+        if (existing.foto) {
+          await env.BUCKET.delete(existing.foto);
         }
       } catch (uploadError) {
         console.error('Photo upload error:', uploadError);
@@ -317,7 +317,7 @@ async function handlePut(request, env, user) {
     }
 
     await env.DB.prepare(
-      `UPDATE students SET cedula_escolar = ?, nombre = ?, apellido = ?, fecha_nacimiento = ?, grado = ?, seccion = ?, turno = ?, direccion = ?, telefono_emergencia = ?, foto_key = ? WHERE id = ?`
+      `UPDATE students SET cedula_escolar = ?, nombre = ?, apellido = ?, fecha_nacimiento = ?, grado = ?, seccion = ?, direccion = ?, telefono_emergencia = ?, contacto_emergencia = ?, foto = ? WHERE id = ?`
     )
       .bind(
         cedula_escolar !== undefined ? cedula_escolar : existing.cedula_escolar,
@@ -326,9 +326,9 @@ async function handlePut(request, env, user) {
         fecha_nacimiento !== undefined ? fecha_nacimiento : existing.fecha_nacimiento,
         grado || existing.grado,
         seccion || existing.seccion,
-        body.turno !== undefined ? body.turno : existing.turno,
         direccion !== undefined ? direccion : existing.direccion,
         telefono_emergencia !== undefined ? telefono_emergencia : existing.telefono_emergencia,
+        contacto_emergencia !== undefined ? contacto_emergencia : existing.contacto_emergencia,
         fotoKey,
         id
       )

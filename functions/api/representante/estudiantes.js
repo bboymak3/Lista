@@ -34,8 +34,8 @@ async function handleGet(request, env, user) {
     // Get students linked to this representative
     const { results: studentLinks } = await env.DB.prepare(
       `SELECT s.id, s.cedula_escolar, s.nombre, s.apellido, s.fecha_nacimiento,
-              s.grado, s.seccion, s.turno, s.direccion, s.telefono_emergencia,
-              s.codigo_unico, s.qr_code, s.foto_key, s.activo, ps.parentesco
+              s.grado, s.seccion, s.direccion, s.telefono_emergencia, s.contacto_emergencia,
+              s.codigo_unico, s.qr_code, s.foto, s.activo, ps.parentesco
        FROM parent_student ps
        INNER JOIN students s ON ps.estudiante_id = s.id
        WHERE ps.representante_id = ? AND s.activo = 1
@@ -63,7 +63,7 @@ async function handleGet(request, env, user) {
 
       // Get recent attendance records (last 5)
       const { results: recentRecords } = await env.DB.prepare(
-        `SELECT ar.estado, ar.observaciones, ar.hora_registro,
+        `SELECT ar.estado, ar.observacion, ar.fecha_registro,
                 sub.nombre as materia_nombre, s.dia_semana, s.hora_inicio
          FROM attendance_records ar
          INNER JOIN attendance_sessions ats ON ar.sesion_id = ats.id

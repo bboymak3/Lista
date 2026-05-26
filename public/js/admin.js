@@ -68,13 +68,6 @@ const adminApp = {
                 navSection: 'Gestión'
             },
             {
-                id: 'view-profesores-horario',
-                navView: 'profesores-horario',
-                navLabel: 'Horario Profesores',
-                navIcon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
-                navSection: 'Gestión'
-            },
-            {
                 id: 'view-lapsos',
                 navView: 'lapsos',
                 navLabel: 'Lapsos',
@@ -327,8 +320,7 @@ const adminApp = {
             const rolesMap = {
                 admin: 'Administrador',
                 profesor: 'Profesor',
-                representante: 'Representante',
-                estudiante: 'Estudiante'
+                representante: 'Representante'
             };
 
             tbody.innerHTML = this.usuariosData.map(u => `
@@ -370,7 +362,6 @@ const adminApp = {
     showUsuarioModal(id = null) {
         const isEdit = id !== null;
         const usuario = isEdit ? this.usuariosData.find(u => u.id === id) : null;
-        this.usuarioFotoBase64 = null;
 
         const content = `
             <form id="usuarioForm" onsubmit="event.preventDefault(); adminApp.saveUsuario();">
@@ -378,13 +369,7 @@ const adminApp = {
                 <div class="form-row">
                     <div class="form-group">
                         <label for="usuarioCedula">Cédula *</label>
-                        <div style="display:flex;gap:0.5rem;">
-                            <select class="form-control" id="usuarioCedulaPrefix" style="width:80px;">
-                                <option value="V-" ${isEdit && usuario.cedula?.startsWith('E-') ? '' : 'selected'}>V-</option>
-                                <option value="E-" ${isEdit && usuario.cedula?.startsWith('E-') ? 'selected' : ''}>E-</option>
-                            </select>
-                            <input type="text" class="form-control" id="usuarioCedula" value="${isEdit ? escapeHtml(usuario.cedula?.replace(/^[VE]-/, '') || '') : ''}" required placeholder="00000000">
-                        </div>
+                        <input type="text" class="form-control" id="usuarioCedula" value="${isEdit ? escapeHtml(usuario.cedula) : ''}" required placeholder="Ej: V-12345678">
                     </div>
                     <div class="form-group">
                         <label for="usuarioRol">Rol *</label>
@@ -393,7 +378,6 @@ const adminApp = {
                             <option value="admin" ${isEdit && usuario.rol === 'admin' ? 'selected' : ''}>Administrador</option>
                             <option value="profesor" ${isEdit && usuario.rol === 'profesor' ? 'selected' : ''}>Profesor</option>
                             <option value="representante" ${isEdit && usuario.rol === 'representante' ? 'selected' : ''}>Representante</option>
-                            <option value="estudiante" ${isEdit && usuario.rol === 'estudiante' ? 'selected' : ''}>Estudiante</option>
                         </select>
                     </div>
                 </div>
@@ -417,33 +401,9 @@ const adminApp = {
                         <input type="text" class="form-control" id="usuarioTelefono" value="${isEdit ? escapeHtml(usuario.telefono || '') : ''}" placeholder="Ej: 0412-1234567">
                     </div>
                 </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="usuarioTurno">Turno</label>
-                        <select class="form-control" id="usuarioTurno">
-                            <option value="">Sin turno asignado</option>
-                            <option value="manana" ${isEdit && usuario.turno === 'manana' ? 'selected' : ''}>Mañana</option>
-                            <option value="tarde" ${isEdit && usuario.turno === 'tarde' ? 'selected' : ''}>Tarde</option>
-                            <option value="nocturno" ${isEdit && usuario.turno === 'nocturno' ? 'selected' : ''}>Nocturno</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="usuarioPassword">${isEdit ? 'Contraseña (dejar vacío para no cambiar)' : 'Contraseña *'}</label>
-                        <input type="password" class="form-control" id="usuarioPassword" ${isEdit ? '' : 'required'} placeholder="${isEdit ? 'Dejar vacío para mantener actual' : 'Contraseña'}">
-                    </div>
-                </div>
                 <div class="form-group">
-                    <label>Foto del ${usuario?.rol === 'profesor' ? 'Profesor' : 'Usuario'}</label>
-                    <div style="display:flex;align-items:center;gap:1rem;">
-                        <div id="usuarioFotoPreview" style="width:64px;height:64px;border-radius:50%;background:var(--gray-200);display:flex;align-items:center;justify-content:center;overflow:hidden;border:2px solid var(--gray-300);">
-                            ${isEdit && usuario.foto_url ? `<img src="${usuario.foto_url}" style="width:100%;height:100%;object-fit:cover;">` : '<span style="font-size:0.75rem;color:var(--gray-500);">Sin foto</span>'}
-                        </div>
-                        <div>
-                            <input type="file" id="usuarioFotoInput" accept="image/*" onchange="adminApp.handleUsuarioFoto(this)" style="display:none;">
-                            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('usuarioFotoInput').click()">Seleccionar Foto</button>
-                            ${isEdit && usuario.foto_url ? '<button type="button" class="btn btn-outline btn-sm" onclick="adminApp.removeUsuarioFoto()" style="margin-left:0.5rem;">Quitar</button>' : ''}
-                        </div>
-                    </div>
+                    <label for="usuarioPassword">${isEdit ? 'Contraseña (dejar vacío para no cambiar)' : 'Contraseña *'}</label>
+                    <input type="password" class="form-control" id="usuarioPassword" ${isEdit ? '' : 'required'} placeholder="${isEdit ? 'Dejar vacío para mantener actual' : 'Contraseña'}">
                 </div>
             </form>
         `;
@@ -458,36 +418,14 @@ const adminApp = {
         showModal(isEdit ? 'Editar Usuario' : 'Nuevo Usuario', content, footer);
     },
 
-    handleUsuarioFoto(input) {
-        const file = input.files[0];
-        if (!file) return;
-        if (file.size > 2 * 1024 * 1024) { showToast('La imagen no debe superar 2MB', 'warning'); input.value = ''; return; }
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            this.usuarioFotoBase64 = e.target.result;
-            const preview = document.getElementById('usuarioFotoPreview');
-            if (preview) preview.innerHTML = `<img src="${this.usuarioFotoBase64}" style="width:100%;height:100%;object-fit:cover;">`;
-        };
-        reader.readAsDataURL(file);
-    },
-
-    removeUsuarioFoto() {
-        this.usuarioFotoBase64 = 'REMOVE';
-        const preview = document.getElementById('usuarioFotoPreview');
-        if (preview) preview.innerHTML = '<span style="font-size:0.75rem;color:var(--gray-500);">Sin foto</span>';
-    },
-
     async saveUsuario() {
         const id = document.getElementById('usuarioId')?.value;
-        const cedulaPrefix = document.getElementById('usuarioCedulaPrefix')?.value || 'V-';
-        const cedulaNumber = document.getElementById('usuarioCedula')?.value.trim();
-        const cedula = cedulaPrefix + cedulaNumber;
+        const cedula = document.getElementById('usuarioCedula')?.value.trim();
         const rol = document.getElementById('usuarioRol')?.value;
         const nombre = document.getElementById('usuarioNombre')?.value.trim();
         const apellido = document.getElementById('usuarioApellido')?.value.trim();
         const email = document.getElementById('usuarioEmail')?.value.trim();
         const telefono = document.getElementById('usuarioTelefono')?.value.trim();
-        const turno = document.getElementById('usuarioTurno')?.value;
         const password = document.getElementById('usuarioPassword')?.value;
 
         if (!cedula || !rol || !nombre || !apellido) {
@@ -501,15 +439,8 @@ const adminApp = {
 
         try {
             showLoading();
-            const body = { cedula, rol, nombre, apellido, email, telefono, turno };
+            const body = { cedula, rol, nombre, apellido, email, telefono };
             if (password) body.password = password;
-
-            // Handle photo
-            if (this.usuarioFotoBase64 && this.usuarioFotoBase64 !== 'REMOVE') {
-                body.foto = this.usuarioFotoBase64;
-            } else if (this.usuarioFotoBase64 === 'REMOVE') {
-                body.remove_foto = true;
-            }
 
             if (id) {
                 body.id = parseInt(id);
@@ -522,7 +453,6 @@ const adminApp = {
             }
 
             closeModal();
-            this.usuarioFotoBase64 = null;
             this.loadUsuarios(this.currentPages.usuarios);
         } catch (error) {
             console.error('Error al guardar usuario:', error);
@@ -566,8 +496,7 @@ const adminApp = {
         const rolesMap = {
             admin: 'Administrador',
             profesor: 'Profesor',
-            representante: 'Representante',
-            estudiante: 'Estudiante'
+            representante: 'Representante'
         };
 
         if (filtered.length === 0) {
@@ -663,7 +592,7 @@ const adminApp = {
         }
     },
 
-    async showEstudianteModal(id = null) {
+    showEstudianteModal(id = null) {
         const isEdit = id !== null;
         const estudiante = isEdit ? this.estudiantesData.find(e => e.id === id) : null;
         this.fotoBase64 = null;
@@ -712,28 +641,14 @@ const adminApp = {
                 <div class="form-row">
                     <div class="form-group">
                         <label for="estudianteSeccion">Sección *</label>
-                        <select class="form-control" id="estudianteSeccion" required onchange="adminApp.onSeccionChange()">
-                            <option value="">Cargando secciones...</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="estudianteTurno">Turno *</label>
-                        <select class="form-control" id="estudianteTurno" required>
+                        <select class="form-control" id="estudianteSeccion" required>
                             <option value="">Seleccione</option>
-                            <option value="manana" ${isEdit && estudiante.turno === 'manana' ? 'selected' : ''}>Mañana</option>
-                            <option value="tarde" ${isEdit && estudiante.turno === 'tarde' ? 'selected' : ''}>Tarde</option>
-                            <option value="nocturno" ${isEdit && estudiante.turno === 'nocturno' ? 'selected' : ''}>Nocturno</option>
+                            ${['A','B','C','D'].map(s => `<option value="${s}" ${isEdit && estudiante.seccion === s ? 'selected' : ''}>Sección "${s}"</option>`).join('')}
                         </select>
                     </div>
-                </div>
-                <div class="form-row">
                     <div class="form-group">
                         <label for="estudianteTelefonoEmergencia">Teléfono de Emergencia</label>
                         <input type="text" class="form-control" id="estudianteTelefonoEmergencia" value="${isEdit ? escapeHtml(estudiante.telefono_emergencia || '') : ''}" placeholder="Ej: 0412-1234567">
-                    </div>
-                    <div class="form-group">
-                        <label for="estudianteTelefonoRepresentante">Teléfono del Representante</label>
-                        <input type="text" class="form-control" id="estudianteTelefonoRepresentante" value="${isEdit ? escapeHtml(estudiante.telefono_representante || '') : ''}" placeholder="Ej: 0414-1234567">
                     </div>
                 </div>
                 <div class="form-group">
@@ -768,26 +683,6 @@ const adminApp = {
         `;
 
         showModal(isEdit ? 'Editar Estudiante' : 'Nuevo Estudiante', content, footer);
-
-        // Load sections from API dynamically
-        try {
-            const secData = await apiCall('GET', '/admin/secciones?action=listar');
-            const secciones = secData.secciones || [];
-            const select = document.getElementById('estudianteSeccion');
-            if (select) {
-                select.innerHTML = '<option value="">Seleccione</option>' + secciones.map(s =>
-                    `<option value="${s.nombre}" data-grado="${s.grado}" data-turno="${s.turno}" ${isEdit && estudiante?.seccion === s.nombre ? 'selected' : ''}>${s.grado}° "${s.nombre}" - ${s.turno === 'manana' ? 'Mañana' : s.turno === 'tarde' ? 'Tarde' : 'Nocturno'}</option>`
-                ).join('');
-                // Trigger onchange to auto-fill grado/turno if editing
-                if (isEdit && estudiante?.seccion) {
-                    select.value = estudiante.seccion;
-                    this.onSeccionChange();
-                }
-            }
-        } catch(e) {
-            const select = document.getElementById('estudianteSeccion');
-            if (select) select.innerHTML = '<option value="">Error al cargar secciones</option>';
-        }
     },
 
     handleFotoUpload(input) {
@@ -827,17 +722,6 @@ const adminApp = {
         if (input) input.value = '';
     },
 
-    onSeccionChange() {
-        const select = document.getElementById('estudianteSeccion');
-        const option = select?.options[select.selectedIndex];
-        if (option) {
-            const grado = option.dataset.grado;
-            const turno = option.dataset.turno;
-            if (grado) document.getElementById('estudianteGrado').value = grado;
-            if (turno) document.getElementById('estudianteTurno').value = turno;
-        }
-    },
-
     async saveEstudiante() {
         const id = document.getElementById('estudianteId')?.value;
         const nombre = document.getElementById('estudianteNombre')?.value.trim();
@@ -847,7 +731,6 @@ const adminApp = {
         const genero = document.getElementById('estudianteGenero')?.value;
         const grado = document.getElementById('estudianteGrado')?.value;
         const seccion = document.getElementById('estudianteSeccion')?.value;
-        const turno = document.getElementById('estudianteTurno')?.value;
         const direccion = document.getElementById('estudianteDireccion')?.value.trim();
         const telefono_emergencia = document.getElementById('estudianteTelefonoEmergencia')?.value.trim();
 
@@ -861,8 +744,7 @@ const adminApp = {
 
             const body = {
                 nombre, apellido, cedula_escolar, fecha_nacimiento,
-                genero, grado, seccion, turno, direccion, telefono_emergencia,
-                telefono_representante: document.getElementById('estudianteTelefonoRepresentante')?.value.trim()
+                genero, grado, seccion, direccion, telefono_emergencia
             };
 
             if (this.fotoBase64) {
@@ -873,54 +755,14 @@ const adminApp = {
                 body.id = parseInt(id);
                 await apiCall('PUT', '/admin/estudiantes', body);
                 showToast('Estudiante actualizado exitosamente', 'success');
-                closeModal();
-                this.fotoBase64 = null;
-                this.loadEstudiantes(this.currentPages.estudiantes);
             } else {
-                const result = await apiCall('POST', '/admin/estudiantes', body);
+                await apiCall('POST', '/admin/estudiantes', body);
                 showToast('Estudiante creado exitosamente', 'success');
-                closeModal();
-                this.fotoBase64 = null;
-
-                // Show representative access info if available
-                if (result.representante || result.estudiante) {
-                    const rep = result.representante || {};
-                    const est = result.estudiante || {};
-                    const phone = body.telefono_representante || '';
-                    const whatsappLink = phone ? `https://wa.me/${phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola, acceda al sistema de asistencia de su representado con este enlace: ${rep.link || ''} Cédula: ${rep.cedula || ''} Contraseña: ${rep.password || ''}`)}` : '';
-
-                    showModal('Credenciales de Acceso', `
-                        <div style="text-align:center;">
-                            <div style="font-size:2rem;margin-bottom:0.5rem;">🔗</div>
-                            <h4 style="margin-bottom:0.5rem;">Credenciales de Acceso</h4>
-                            <p style="color:var(--gray-500);margin-bottom:1rem;font-size:0.875rem;">Comparta esta información con el estudiante y su representante</p>
-                            ${est.cedula ? `
-                            <div style="background:var(--primary-light);padding:1rem;border-radius:0.5rem;text-align:left;margin-bottom:1rem;">
-                                <h5 style="margin:0 0 0.5rem;color:var(--primary);">🎓 Acceso del Estudiante</h5>
-                                <div style="margin-bottom:0.25rem;"><strong>Cédula:</strong> <code>${escapeHtml(est.cedula)}</code></div>
-                                <div><strong>Contraseña:</strong> <code>${escapeHtml(est.password)}</code></div>
-                            </div>` : ''}
-                            ${rep.cedula ? `
-                            <div style="background:var(--gray-50);padding:1rem;border-radius:0.5rem;text-align:left;margin-bottom:1rem;">
-                                <h5 style="margin:0 0 0.5rem;color:var(--gray-700);">👤 Acceso del Representante</h5>
-                                <div style="margin-bottom:0.25rem;"><strong>Cédula:</strong> <code>${escapeHtml(rep.cedula)}</code></div>
-                                <div style="margin-bottom:0.25rem;"><strong>Contraseña:</strong> <code>${escapeHtml(rep.password)}</code></div>
-                                <div style="margin-bottom:0.5rem;"><strong>Enlace:</strong></div>
-                                <div style="display:flex;gap:0.5rem;align-items:center;">
-                                    <input type="text" class="form-control" id="repLinkInput" value="${escapeHtml(rep.link || '')}" readonly style="font-size:0.75rem;">
-                                    <button class="btn btn-outline btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('repLinkInput').value);showToast('Enlace copiado','success')">📋 Copiar</button>
-                                </div>
-                            </div>` : ''}
-                            <div style="display:flex;gap:0.5rem;justify-content:center;flex-wrap:wrap;">
-                                ${whatsappLink ? `<a href="${whatsappLink}" target="_blank" class="btn btn-success btn-sm">📱 Enviar por WhatsApp</a>` : ''}
-                                <button class="btn btn-outline btn-sm" onclick="navigator.clipboard.writeText('Estudiante - Cédula: ${est.cedula || ''} Contraseña: ${est.password || ''}${rep.cedula ? '\\nRepresentante - Cédula: ' + rep.cedula + ' Contraseña: ' + rep.password : ''}');showToast('Información copiada','success')">📋 Copiar Todo</button>
-                            </div>
-                        </div>
-                    `, '<button class="btn btn-primary" onclick="closeModal()">Cerrar</button>');
-                }
-
-                this.loadEstudiantes(this.currentPages.estudiantes);
             }
+
+            closeModal();
+            this.fotoBase64 = null;
+            this.loadEstudiantes(this.currentPages.estudiantes);
         } catch (error) {
             console.error('Error al guardar estudiante:', error);
             showToast(error.message || 'Error al guardar el estudiante', 'error');
@@ -1081,8 +923,22 @@ const adminApp = {
         tbody.innerHTML = '<tr><td colspan="4" class="table-empty"><div class="spinner"></div> Cargando materias...</td></tr>';
 
         try {
-            const data = await apiCall('GET', `/admin/materias?page=${page}&limit=${this.itemsPerPage}`);
-            this.materiasData = data.subjects || data.materias || [];
+            const data = await apiCall('GET', `/admin/horarios?page=${page}&limit=${this.itemsPerPage}`);
+
+            // Intentar obtener materias desde horarios (agrupando por materia)
+            const horarios = data.horarios || data.schedules || [];
+            const materiasMap = {};
+            horarios.forEach(h => {
+                if (h.materia_id && !materiasMap[h.materia_id]) {
+                    materiasMap[h.materia_id] = {
+                        id: h.materia_id,
+                        nombre: h.materia_nombre || h.materia,
+                        descripcion: h.materia_descripcion || '',
+                        codigo: h.materia_codigo || ''
+                    };
+                }
+            });
+            this.materiasData = Object.values(materiasMap);
 
             if (this.materiasData.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="4" class="table-empty">No hay materias registradas</td></tr>';
@@ -1092,9 +948,9 @@ const adminApp = {
 
             tbody.innerHTML = this.materiasData.map(m => `
                 <tr>
+                    <td>${m.id}</td>
                     <td><strong>${escapeHtml(m.nombre)}</strong>${m.codigo ? ` <code style="font-size:0.75rem;">${escapeHtml(m.codigo)}</code>` : ''}</td>
                     <td>${escapeHtml(m.descripcion || '-')}</td>
-                    <td>${m.total_horarios || 0} horario(s) | ${m.total_profesores || 0} prof.</td>
                     <td>
                         <div class="table-actions">
                             <button class="btn btn-outline btn-sm" onclick="adminApp.showMateriaModal(${m.id})" title="Editar">
@@ -1168,10 +1024,10 @@ const adminApp = {
 
             if (id) {
                 body.id = parseInt(id);
-                await apiCall('PUT', '/admin/materias', body);
+                await apiCall('PUT', '/admin/horarios', body);
                 showToast('Materia actualizada exitosamente', 'success');
             } else {
-                await apiCall('POST', '/admin/materias', body);
+                await apiCall('POST', '/admin/horarios', body);
                 showToast('Materia creada exitosamente', 'success');
             }
 
@@ -1189,7 +1045,7 @@ const adminApp = {
         showConfirm('¿Está seguro de que desea eliminar esta materia? Se eliminarán los horarios asociados.', async () => {
             try {
                 showLoading();
-                await apiCall('DELETE', `/admin/materias?id=${id}`);
+                await apiCall('DELETE', `/admin/horarios?id=${id}`);
                 showToast('Materia eliminada exitosamente', 'success');
                 this.loadMaterias(this.currentPages.materias);
             } catch (error) {
@@ -1254,16 +1110,15 @@ const adminApp = {
                 return;
             }
 
-            const DIAS_MAP = {1:'Lunes', 2:'Martes', 3:'Miércoles', 4:'Jueves', 5:'Viernes', 6:'Sábado', 7:'Domingo'};
             tbody.innerHTML = this.horariosData.map(h => `
                 <tr>
                     <td>${escapeHtml(h.materia_nombre || h.materia || '-')}</td>
-                    <td>${escapeHtml((h.profesor_nombre||'') + ' ' + (h.profesor_apellido||''))}</td>
-                    <td>${DIAS_MAP[h.dia_semana] || getDayName(h.dia_semana || h.dia)}</td>
+                    <td>${escapeHtml(h.profesor_nombre || h.profesor || '-')}</td>
+                    <td>${getDayName(h.dia_semana || h.dia)}</td>
                     <td>${formatTimeString(h.hora_inicio)}</td>
                     <td>${formatTimeString(h.hora_fin)}</td>
-                    <td>${escapeHtml(h.seccion_display || h.seccion_nombre || '-')}</td>
                     <td>${escapeHtml(h.aula || '-')}</td>
+                    <td>${h.periodo || '-'}</td>
                     <td>
                         <div class="table-actions">
                             <button class="btn btn-outline btn-sm" onclick="adminApp.showHorarioModal(${h.id})" title="Editar">
@@ -1292,23 +1147,25 @@ const adminApp = {
         const isEdit = id !== null;
         const horario = isEdit ? this.horariosData.find(h => h.id === id) : null;
 
-        // Cargar profesores, materias y secciones para los selects
+        // Cargar profesores y materias para los selects
         let profesores = [];
         let materias = [];
-        let secciones = [];
         try {
             const profRes = await apiCall('GET', '/admin/usuarios?rol=profesor&limit=100');
             profesores = profRes.users || [];
         } catch (e) { /* ignorar */ }
 
         try {
-            const matRes = await apiCall('GET', '/admin/materias?limit=100');
-            materias = matRes.subjects || matRes.materias || [];
-        } catch (e) { /* ignorar */ }
-
-        try {
-            const secRes = await apiCall('GET', '/admin/secciones?action=listar');
-            secciones = secRes.secciones || [];
+            const matRes = await apiCall('GET', '/admin/horarios?limit=100');
+            const horarios = matRes.horarios || matRes.schedules || [];
+            const seen = new Set();
+            horarios.forEach(h => {
+                const key = `${h.materia_id}`;
+                if (h.materia_id && !seen.has(key)) {
+                    seen.add(key);
+                    materias.push({ id: h.materia_id, nombre: h.materia_nombre || h.materia });
+                }
+            });
         } catch (e) { /* ignorar */ }
 
         const diasSemana = [
@@ -1340,22 +1197,15 @@ const adminApp = {
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="horarioSeccion">Sección (Grado/Grupo)</label>
-                        <select class="form-control" id="horarioSeccion">
-                            <option value="">Sin sección asignada</option>
-                            ${secciones.map(s => `
-                                <option value="${s.id}" ${isEdit && horario.seccion_id == s.id ? 'selected' : ''}>
-                                    ${s.grado}° "${s.nombre}" - ${s.turno === 'manana' ? 'Mañana' : s.turno === 'tarde' ? 'Tarde' : 'Nocturno'}
-                                </option>
-                            `).join('')}
-                        </select>
-                    </div>
-                    <div class="form-group">
                         <label for="horarioDia">Día *</label>
                         <select class="form-control" id="horarioDia" required>
                             <option value="">Seleccione un día</option>
                             ${diasSemana.map(d => `<option value="${d.valor}" ${isEdit && horario.dia_semana == d.valor ? 'selected' : ''}>${d.nombre}</option>`).join('')}
                         </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="horarioAula">Aula</label>
+                        <input type="text" class="form-control" id="horarioAula" value="${isEdit ? escapeHtml(horario.aula || '') : ''}" placeholder="Ej: A-101">
                     </div>
                 </div>
                 <div class="form-row">
@@ -1368,18 +1218,9 @@ const adminApp = {
                         <input type="time" class="form-control" id="horarioHoraFin" value="${isEdit ? (horario.hora_fin || '') : ''}" required>
                     </div>
                 </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="horarioAula">Aula</label>
-                        <input type="text" class="form-control" id="horarioAula" value="${isEdit ? escapeHtml(horario.aula || '') : ''}" placeholder="Ej: A-101">
-                    </div>
-                    <div class="form-group">
-                        <label for="horarioPeriodo">Período</label>
-                        <input type="text" class="form-control" id="horarioPeriodo" value="${isEdit ? escapeHtml(horario.periodo_escolar || horario.periodo || '') : ''}" placeholder="Ej: 2024-2025">
-                    </div>
-                </div>
-                <div style="background:var(--info-light);padding:0.75rem;border-radius:0.375rem;font-size:0.8125rem;color:var(--info);">
-                    <strong>Nota:</strong> Al asignar una sección, los estudiantes de esa sección se agregarán automáticamente a este horario.
+                <div class="form-group">
+                    <label for="horarioPeriodo">Período</label>
+                    <input type="text" class="form-control" id="horarioPeriodo" value="${isEdit ? escapeHtml(horario.periodo || '') : ''}" placeholder="Ej: 2024-2025">
                 </div>
             </form>
         `;
@@ -1398,12 +1239,11 @@ const adminApp = {
         const id = document.getElementById('horarioId')?.value;
         const materia_id = document.getElementById('horarioMateria')?.value;
         const profesor_id = document.getElementById('horarioProfesor')?.value;
-        const seccionRaw = document.getElementById('horarioSeccion')?.value;
         const dia_semana = document.getElementById('horarioDia')?.value;
         const hora_inicio = document.getElementById('horarioHoraInicio')?.value;
         const hora_fin = document.getElementById('horarioHoraFin')?.value;
         const aula = document.getElementById('horarioAula')?.value.trim();
-        const periodo_escolar = document.getElementById('horarioPeriodo')?.value.trim();
+        const periodo = document.getElementById('horarioPeriodo')?.value.trim();
 
         if (!materia_id || !profesor_id || !dia_semana || !hora_inicio || !hora_fin) {
             showToast('Por favor complete todos los campos requeridos', 'warning');
@@ -1412,13 +1252,11 @@ const adminApp = {
 
         try {
             showLoading();
-
             const body = {
                 materia_id: parseInt(materia_id),
                 profesor_id: parseInt(profesor_id),
-                seccion_id: seccionRaw ? parseInt(seccionRaw) : null,
                 dia_semana: parseInt(dia_semana),
-                hora_inicio, hora_fin, aula, periodo_escolar
+                hora_inicio, hora_fin, aula, periodo
             };
 
             if (id) {
@@ -1454,335 +1292,6 @@ const adminApp = {
                 hideLoading();
             }
         });
-    },
-
-    // ============================================
-    // HORARIO PROFESORES (Calendar)
-    // ============================================
-    async showProfesorScheduleModal(profesorId) {
-        try {
-            // Load professor info
-            const profRes = await apiCall('GET', '/admin/usuarios?rol=profesor&limit=100');
-            const profesores = profRes.users || [];
-
-            // Load schedules for this professor
-            let schedules = [];
-            if (profesorId) {
-                const schedRes = await apiCall('GET', `/admin/horarios?profesor_id=${profesorId}&limit=100`);
-                schedules = schedRes.schedules || schedRes.horarios || [];
-            }
-
-            // Load materias for assignment
-            const matRes = await apiCall('GET', '/admin/materias?limit=100');
-            const materias = matRes.subjects || matRes.materias || [];
-
-            // Load secciones
-            const secRes = await apiCall('GET', '/admin/secciones?action=listar');
-            const secciones = secRes.secciones || [];
-
-            const TIME_SLOTS = [
-                {inicio:'07:00', fin:'07:40', label:'1ra'},
-                {inicio:'07:40', fin:'08:20', label:'2da'},
-                {inicio:'08:20', fin:'09:10', label:'3ra'},
-                {inicio:'09:10', fin:'09:50', label:'4ta'},
-                {inicio:'09:50', fin:'10:30', label:'5ta'},
-                {inicio:'10:30', fin:'11:10', label:'6ta'},
-                {inicio:'11:10', fin:'11:50', label:'7ma'},
-                {inicio:'11:50', fin:'12:30', label:'8va'},
-                {inicio:'12:30', fin:'12:45', label:'9na'}
-            ];
-            const DIAS = {1:'Lunes', 2:'Martes', 3:'Miércoles', 4:'Jueves', 5:'Viernes'};
-
-            // Build schedule map
-            const schedMap = {};
-            schedules.forEach(s => {
-                const key = `${s.dia_semana}-${s.hora_inicio}`;
-                schedMap[key] = s;
-            });
-
-            let html = `
-                <div class="form-group" style="margin-bottom:1rem;">
-                    <label>Profesor</label>
-                    <select class="form-control" id="scheduleProfesorSelect" onchange="adminApp.showProfesorScheduleModal(this.value)">
-                        <option value="">Seleccione un profesor</option>
-                        ${profesores.map(p => `<option value="${p.id}" ${p.id == profesorId ? 'selected' : ''}>${escapeHtml(p.nombre)} ${escapeHtml(p.apellido)} (${escapeHtml(p.cedula)})</option>`).join('')}
-                    </select>
-                </div>
-            `;
-
-            if (profesorId) {
-                const colors = ['#e8f0fe','#e6f4ea','#fef7e0','#fce8e6','#e8eaed','#f3e8fd','#e0f7fa','#fff3e0','#f1f8e9'];
-                html += `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;min-width:600px;">
-                    <thead><tr><th style="padding:0.5rem;border:1px solid var(--gray-200);background:var(--gray-50);width:80px;">Hora</th>`;
-                Object.entries(DIAS).forEach(([dia, nombre]) => {
-                    html += `<th style="padding:0.5rem;border:1px solid var(--gray-200);background:var(--gray-50);text-align:center;">${nombre}</th>`;
-                });
-                html += `</tr></thead><tbody>`;
-
-                TIME_SLOTS.forEach(slot => {
-                    html += `<tr><td style="padding:0.375rem;border:1px solid var(--gray-200);font-size:0.75rem;font-weight:600;text-align:center;white-space:nowrap;">
-                        <div>${slot.inicio}</div><div style="color:var(--gray-400);font-weight:400;">${slot.fin}</div>
-                    </td>`;
-                    Object.keys(DIAS).forEach(dia => {
-                        const key = `${dia}-${slot.inicio}`;
-                        const existing = schedMap[key];
-                        if (existing) {
-                            const bg = colors[(existing.materia_id || 0) % colors.length];
-                            html += `<td style="padding:0.375rem;border:1px solid var(--gray-200);background:${bg};font-size:0.75rem;text-align:center;cursor:pointer;" onclick="adminApp.editScheduleCell(${existing.id})" title="Editar">
-                                <div style="font-weight:600;">${escapeHtml(existing.materia_nombre||'')}</div>
-                                <div style="color:var(--gray-500);">${escapeHtml(existing.seccion_display||existing.seccion_nombre||'')}</div>
-                                <div style="color:var(--gray-400);font-size:0.625rem;">${escapeHtml(existing.aula||'')}</div>
-                            </td>`;
-                        } else {
-                            html += `<td style="padding:0.375rem;border:1px solid var(--gray-200);text-align:center;cursor:pointer;font-size:0.625rem;color:var(--gray-400);" onclick="adminApp.addScheduleCell(${profesorId}, ${dia}, '${slot.inicio}', '${slot.fin}')" title="Agregar clase">+</td>`;
-                        }
-                    });
-                    html += `</tr>`;
-                });
-                html += `</tbody></table></div>`;
-            } else {
-                html += '<p style="text-align:center;color:var(--gray-500);padding:1rem;">Seleccione un profesor para ver su horario</p>';
-            }
-
-            showModal('Horario del Profesor', html, '<button class="btn btn-outline" onclick="closeModal()">Cerrar</button>');
-        } catch (error) {
-            console.error('Error en showProfesorScheduleModal:', error);
-            showToast('Error al cargar horario del profesor', 'error');
-        }
-    },
-
-    addScheduleCell(profesorId, dia, horaInicio, horaFin) {
-        const dias = {1:'Lunes', 2:'Martes', 3:'Miércoles', 4:'Jueves', 5:'Viernes'};
-
-        Promise.all([
-            apiCall('GET', '/admin/materias?limit=100'),
-            apiCall('GET', '/admin/secciones?action=listar')
-        ]).then(([matRes, secRes]) => {
-            const materias = matRes.subjects || matRes.materias || [];
-            const secciones = secRes.secciones || [];
-
-            const content = `
-                <form id="addScheduleForm">
-                    <p style="font-size:0.875rem;color:var(--gray-500);margin-bottom:1rem;">Agregar clase: ${dias[dia]} ${horaInicio}-${horaFin}</p>
-                    <div class="form-group">
-                        <label>Materia *</label>
-                        <select class="form-control" id="cellMateria" required>
-                            <option value="">Seleccione</option>
-                            ${materias.map(m => `<option value="${m.id}">${escapeHtml(m.nombre)}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Sección</label>
-                        <select class="form-control" id="cellSeccion">
-                            <option value="">Sin sección</option>
-                            ${secciones.map(s => `<option value="${s.id}">${s.grado}° "${s.nombre}" - ${s.turno==='manana'?'Mañana':s.turno==='tarde'?'Tarde':'Nocturno'}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Aula</label>
-                        <input type="text" class="form-control" id="cellAula" placeholder="Ej: A-101">
-                    </div>
-                </form>
-            `;
-
-            showModal('Agregar Clase', content, `
-                <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
-                <button class="btn btn-primary" onclick="adminApp.saveScheduleCell(${profesorId}, ${dia}, '${horaInicio}', '${horaFin}')">Guardar</button>
-            `);
-        }).catch(e => showToast('Error: ' + e.message, 'error'));
-    },
-
-    async saveScheduleCell(profesorId, dia, horaInicio, horaFin) {
-        const materia_id = document.getElementById('cellMateria')?.value;
-        const seccion_id = document.getElementById('cellSeccion')?.value;
-        const aula = document.getElementById('cellAula')?.value.trim();
-
-        if (!materia_id) { showToast('Seleccione una materia', 'warning'); return; }
-
-        try {
-            showLoading();
-            await apiCall('POST', '/admin/horarios', {
-                materia_id: parseInt(materia_id),
-                profesor_id: parseInt(profesorId),
-                seccion_id: seccion_id ? parseInt(seccion_id) : null,
-                dia_semana: dia,
-                hora_inicio: horaInicio,
-                hora_fin: horaFin,
-                aula
-            });
-            showToast('Clase agregada exitosamente', 'success');
-            closeModal();
-            // Refresh both modal and panel views
-            this.showProfesorScheduleModal(profesorId);
-            const phProfSelect = document.getElementById('phProfesorSelect');
-            if (phProfSelect?.value == profesorId) this.loadProfesorScheduleGrid(profesorId);
-        } catch (e) {
-            showToast(e.message || 'Error al agregar clase', 'error');
-        } finally {
-            hideLoading();
-        }
-    },
-
-    editScheduleCell(scheduleId) {
-        showConfirm('¿Desea eliminar esta clase del horario?', async () => {
-            try {
-                showLoading();
-                await apiCall('DELETE', `/admin/horarios?id=${scheduleId}`);
-                showToast('Clase eliminada', 'success');
-                // Refresh both modal and panel views
-                const profSelect = document.getElementById('scheduleProfesorSelect');
-                const phProfSelect = document.getElementById('phProfesorSelect');
-                if (profSelect?.value) this.showProfesorScheduleModal(profSelect.value);
-                if (phProfSelect?.value) this.loadProfesorScheduleGrid(phProfSelect.value);
-            } catch (e) { showToast(e.message || 'Error', 'error'); }
-            finally { hideLoading(); }
-        });
-    },
-
-    async loadProfesoresHorario() {
-        const view = document.getElementById('view-profesores-horario');
-        if (!view) return;
-        view.innerHTML = '<div class="spinner" style="margin:2rem auto;"></div>';
-        try {
-            const profRes = await apiCall('GET', '/admin/usuarios?rol=profesor&limit=100');
-            const profesores = profRes.users || [];
-            const matRes = await apiCall('GET', '/admin/materias?limit=100');
-            const materias = matRes.subjects || matRes.materias || [];
-            const secRes = await apiCall('GET', '/admin/secciones?action=listar');
-            const secciones = secRes.secciones || [];
-
-            let html = `
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:0.75rem;">
-                    <h3 style="margin:0;">Horario de Profesores</h3>
-                    <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
-                        <select class="form-control" id="phProfesorSelect" onchange="adminApp.loadProfesorScheduleGrid(this.value)" style="min-width:220px;">
-                            <option value="">-- Seleccione un profesor --</option>
-                            ${profesores.map(p => `<option value="${p.id}">${escapeHtml(p.nombre)} ${escapeHtml(p.apellido)} (${escapeHtml(p.cedula)})</option>`).join('')}
-                        </select>
-                    </div>
-                </div>
-                <div id="phScheduleContainer">
-                    <div class="empty-state"><div class="empty-state-icon">📅</div><div class="empty-state-title">Seleccione un profesor</div><div class="empty-state-text">Elija un profesor del menú desplegable para ver y gestionar su horario semanal</div></div>
-                </div>
-            `;
-            view.innerHTML = html;
-            // Store for later use
-            this._phMaterias = materias;
-            this._phSecciones = secciones;
-            this._phProfesores = profesores;
-        } catch (error) {
-            console.error('Error al cargar vista de horario profesores:', error);
-            view.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⚠️</div><div class="empty-state-title">Error al cargar</div><div class="empty-state-text">No se pudo cargar la sección de horarios de profesores. Verifique la conexión con el servidor.</div></div>';
-        }
-    },
-
-    async loadProfesorScheduleGrid(profesorId) {
-        const container = document.getElementById('phScheduleContainer');
-        if (!container) return;
-        if (!profesorId) {
-            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📅</div><div class="empty-state-title">Seleccione un profesor</div><div class="empty-state-text">Elija un profesor del menú desplegable para ver su horario semanal</div></div>';
-            return;
-        }
-        container.innerHTML = '<div class="spinner" style="margin:2rem auto;"></div>';
-        try {
-            const schedRes = await apiCall('GET', `/admin/horarios?profesor_id=${profesorId}&limit=100`);
-            const schedules = schedRes.schedules || schedRes.horarios || [];
-            const profesor = (this._phProfesores || []).find(p => p.id == profesorId);
-            const materias = this._phMaterias || [];
-            const secciones = this._phSecciones || [];
-
-            const TIME_SLOTS = [
-                {inicio:'07:00', fin:'07:40', label:'1ra'},
-                {inicio:'07:40', fin:'08:20', label:'2da'},
-                {inicio:'08:20', fin:'09:10', label:'3ra'},
-                {inicio:'09:10', fin:'09:50', label:'4ta'},
-                {inicio:'09:50', fin:'10:30', label:'5ta'},
-                {inicio:'10:30', fin:'11:10', label:'6ta'},
-                {inicio:'11:10', fin:'11:50', label:'7ma'},
-                {inicio:'11:50', fin:'12:30', label:'8va'},
-                {inicio:'12:30', fin:'12:45', label:'9na'}
-            ];
-            const DIAS = {1:'Lunes', 2:'Martes', 3:'Miércoles', 4:'Jueves', 5:'Viernes'};
-
-            // Build schedule map: key = "dia-hora_inicio"
-            const schedMap = {};
-            schedules.forEach(s => {
-                const key = `${s.dia_semana}-${s.hora_inicio}`;
-                schedMap[key] = s;
-            });
-
-            const profName = profesor ? `${profesor.nombre} ${profesor.apellido}` : 'Profesor';
-
-            let html = `
-                <div class="card" style="margin-bottom:1rem;">
-                    <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
-                        <h3 style="margin:0;">Horario de ${escapeHtml(profName)}</h3>
-                        <div style="display:flex;gap:0.5rem;">
-                            <span class="badge badge-info">${schedules.length} clases</span>
-                        </div>
-                    </div>
-                    <div class="card-body" style="padding:0;">
-                        <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;min-width:700px;">
-                            <thead><tr>
-                                <th style="padding:0.625rem;border:1px solid var(--gray-200);background:var(--gray-50);width:90px;text-align:center;font-size:0.8125rem;">Hora</th>`;
-            Object.entries(DIAS).forEach(([dia, nombre]) => {
-                html += `<th style="padding:0.625rem;border:1px solid var(--gray-200);background:var(--gray-50);text-align:center;font-size:0.8125rem;">${nombre}</th>`;
-            });
-            html += `</tr></thead><tbody>`;
-
-            const colors = ['#e8f0fe','#e6f4ea','#fef7e0','#fce8e6','#e8eaed','#f3e8fd','#e0f7fa','#fff3e0','#f1f8e9'];
-
-            TIME_SLOTS.forEach((slot, idx) => {
-                html += `<tr><td style="padding:0.5rem;border:1px solid var(--gray-200);font-size:0.75rem;font-weight:600;text-align:center;vertical-align:middle;white-space:nowrap;background:var(--gray-50);">
-                    <div>${slot.inicio}</div><div style="color:var(--gray-400);font-weight:400;">${slot.fin}</div>
-                    <div style="font-size:0.625rem;color:var(--gray-400);">${slot.label}</div>
-                </td>`;
-                Object.keys(DIAS).forEach(dia => {
-                    const key = `${dia}-${slot.inicio}`;
-                    const existing = schedMap[key];
-                    if (existing) {
-                        const bg = colors[(existing.materia_id || 0) % colors.length];
-                        html += `<td style="padding:0.5rem;border:1px solid var(--gray-200);background:${bg};vertical-align:top;cursor:pointer;min-height:60px;" onclick="adminApp.editScheduleCell(${existing.id})" title="Editar clase">`;
-                        html += `<div style="font-weight:600;font-size:0.8125rem;color:var(--gray-800);">${escapeHtml(existing.materia_nombre||'')}</div>`;
-                        html += `<div style="font-size:0.6875rem;color:var(--gray-600);">${escapeHtml(existing.seccion_display||existing.seccion_nombre||'Sin sección')}</div>`;
-                        html += `<div style="font-size:0.625rem;color:var(--gray-400);">${escapeHtml(existing.aula||'')} ${existing.total_estudiantes ? '| '+existing.total_estudiantes+' alum.' : ''}</div>`;
-                        html += `</td>`;
-                    } else {
-                        html += `<td style="padding:0.5rem;border:1px solid var(--gray-200);vertical-align:middle;text-align:center;cursor:pointer;" onclick="adminApp.addScheduleCell(${profesorId}, ${dia}, '${slot.inicio}', '${slot.fin}')" title="Agregar clase">
-                            <span style="color:var(--gray-300);font-size:1.25rem;">+</span>
-                        </td>`;
-                    }
-                });
-                html += `</tr>`;
-            });
-            html += `</tbody></table></div></div></div>`;
-
-            // Summary table
-            if (schedules.length > 0) {
-                html += `<div class="card"><div class="card-header"><h3>Resumen de Clases</h3></div><div class="table-container"><table><thead><tr><th>Materia</th><th>Sección</th><th>Día</th><th>Hora</th><th>Aula</th><th>Alumnos</th><th>Acciones</th></tr></thead><tbody>`;
-                schedules.forEach(s => {
-                    html += `<tr>
-                        <td><strong>${escapeHtml(s.materia_nombre||'Sin materia')}</strong></td>
-                        <td>${escapeHtml(s.seccion_display||s.seccion_nombre||'-')}</td>
-                        <td>${DIAS[s.dia_semana]||'-'}</td>
-                        <td>${formatTimeString(s.hora_inicio)} - ${formatTimeString(s.hora_fin)}</td>
-                        <td>${escapeHtml(s.aula||'-')}</td>
-                        <td>${s.total_estudiantes||0}</td>
-                        <td><div class="table-actions">
-                            <button class="btn btn-outline btn-sm" onclick="adminApp.showHorarioModal(${s.id})" title="Editar">✏️</button>
-                            <button class="btn btn-danger btn-sm" onclick="adminApp.deleteHorario(${s.id})" title="Eliminar">🗑️</button>
-                        </div></td>
-                    </tr>`;
-                });
-                html += `</tbody></table></div></div>`;
-            }
-
-            container.innerHTML = html;
-        } catch (error) {
-            console.error('Error al cargar horario del profesor:', error);
-            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⚠️</div><div class="empty-state-title">Error al cargar horario</div><div class="empty-state-text">No se pudo cargar el horario del profesor seleccionado. Intente nuevamente.</div></div>';
-            showToast('Error al cargar horario del profesor', 'error');
-        }
     },
 
     // ============================================
@@ -1882,7 +1391,7 @@ const adminApp = {
 
         view.innerHTML = `
             <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
-                <h3>Secciones y Grados</h3>
+                <h3>Secciones</h3>
                 <button class="btn btn-primary" onclick="adminApp.showSeccionModal()">
                     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                     Nueva Sección
@@ -1895,14 +1404,12 @@ const adminApp = {
                             <tr>
                                 <th>Grado</th>
                                 <th>Sección</th>
-                                <th>Turno</th>
-                                <th>Estudiantes</th>
-                                <th>Profesores</th>
+                                <th>Total Estudiantes</th>
                                 <th>Acciones</th>
                             </tr>
                         </thead>
                         <tbody id="seccionesTableBody">
-                            <tr><td colspan="6" class="table-empty"><div class="spinner"></div> Cargando secciones...</td></tr>
+                            <tr><td colspan="4" class="table-empty"><div class="spinner"></div> Cargando secciones...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -1910,46 +1417,52 @@ const adminApp = {
         `;
 
         try {
-            const data = await apiCall('GET', '/admin/secciones?action=listar');
-            this.seccionesData = data.secciones || [];
+            const data = await apiCall('GET', '/admin/estudiantes?limit=10000');
+            const estudiantes = data.students || [];
+
+            // Agrupar por grado y sección
+            const seccionesMap = {};
+            estudiantes.forEach(e => {
+                if (e.grado && e.seccion) {
+                    const key = `${e.grado}-${e.seccion}`;
+                    if (!seccionesMap[key]) {
+                        seccionesMap[key] = { grado: e.grado, seccion: e.seccion, total: 0 };
+                    }
+                    seccionesMap[key].total++;
+                }
+            });
+            this.seccionesData = Object.values(seccionesMap).sort((a, b) => a.grado - b.grado || a.seccion.localeCompare(b.seccion));
 
             const tbody = document.getElementById('seccionesTableBody');
             if (this.seccionesData.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="table-empty">No hay secciones registradas. Cree una sección primero.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="4" class="table-empty">No hay secciones registradas</td></tr>';
                 return;
             }
-
-            const turnoLabels = { manana: 'Mañana', tarde: 'Tarde', nocturno: 'Nocturno' };
 
             tbody.innerHTML = this.seccionesData.map(s => `
                 <tr>
                     <td>${s.grado}° Grado</td>
-                    <td><span class="badge badge-info">Sección "${escapeHtml(s.nombre)}"</span></td>
-                    <td>${turnoLabels[s.turno] || escapeHtml(s.turno || '-')}</td>
-                    <td>${s.total_estudiantes || 0} estudiantes</td>
-                    <td>${s.total_profesores || 0} profesores</td>
+                    <td><span class="badge badge-info">Sección "${escapeHtml(s.seccion)}"</span></td>
+                    <td>${s.total} estudiantes</td>
                     <td>
                         <div class="table-actions">
-                            <button class="btn btn-outline btn-sm" onclick="adminApp.showSeccionModal(${s.id})" title="Editar">✏️</button>
-                            <button class="btn btn-danger btn-sm" onclick="adminApp.deleteSeccion(${s.id})" title="Eliminar">🗑️</button>
+                            <button class="btn btn-outline btn-sm" onclick="adminApp.showSeccionModal('${s.grado}-${s.seccion}')" title="Editar">✏️</button>
                         </div>
                     </td>
                 </tr>
             `).join('');
         } catch (error) {
             console.error('Error al cargar secciones:', error);
-            const tbody = document.getElementById('seccionesTableBody');
-            if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="table-empty">Error al cargar secciones</td></tr>';
+            showToast('Error al cargar las secciones', 'error');
         }
     },
 
     showSeccionModal(id = null) {
         const isEdit = id !== null;
-        const seccion = isEdit ? this.seccionesData.find(s => s.id === id) : null;
+        const seccion = isEdit ? this.seccionesData.find(s => `${s.grado}-${s.seccion}` === id) : null;
 
         const content = `
             <form id="seccionForm" onsubmit="event.preventDefault(); adminApp.saveSeccion();">
-                <input type="hidden" id="seccionId" value="${isEdit ? seccion.id : ''}">
                 <div class="form-row">
                     <div class="form-group">
                         <label for="seccionGrado">Grado *</label>
@@ -1962,17 +1475,9 @@ const adminApp = {
                         <label for="seccionLetra">Sección *</label>
                         <select class="form-control" id="seccionLetra" required>
                             <option value="">Seleccione</option>
-                            ${['A','B','C','D','E','F'].map(s => `<option value="${s}" ${isEdit && seccion?.nombre === s ? 'selected' : ''}>Sección "${s}"</option>`).join('')}
+                            ${['A','B','C','D','E'].map(s => `<option value="${s}" ${isEdit && seccion?.seccion === s ? 'selected' : ''}>Sección "${s}"</option>`).join('')}
                         </select>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label for="seccionTurno">Turno *</label>
-                    <select class="form-control" id="seccionTurno" required>
-                        <option value="manana" ${isEdit && seccion?.turno === 'manana' ? 'selected' : ''}>Mañana</option>
-                        <option value="tarde" ${isEdit && seccion?.turno === 'tarde' ? 'selected' : ''}>Tarde</option>
-                        <option value="nocturno" ${isEdit && seccion?.turno === 'nocturno' ? 'selected' : ''}>Nocturno</option>
-                    </select>
                 </div>
             </form>
         `;
@@ -1986,52 +1491,17 @@ const adminApp = {
     },
 
     async saveSeccion() {
-        const id = document.getElementById('seccionId')?.value;
         const grado = document.getElementById('seccionGrado')?.value;
-        const nombre = document.getElementById('seccionLetra')?.value;
-        const turno = document.getElementById('seccionTurno')?.value;
+        const seccion = document.getElementById('seccionLetra')?.value;
 
-        if (!grado || !nombre || !turno) {
+        if (!grado || !seccion) {
             showToast('Por favor complete todos los campos', 'warning');
             return;
         }
 
-        try {
-            showLoading();
-            const body = { nombre, grado, turno };
-
-            if (id) {
-                body.id = parseInt(id);
-                await apiCall('PUT', '/admin/secciones', body);
-                showToast('Sección actualizada exitosamente', 'success');
-            } else {
-                await apiCall('POST', '/admin/secciones', body);
-                showToast('Sección creada exitosamente', 'success');
-            }
-
-            closeModal();
-            this.loadSecciones();
-        } catch (error) {
-            console.error('Error al guardar sección:', error);
-            showToast(error.message || 'Error al guardar la sección', 'error');
-        } finally {
-            hideLoading();
-        }
-    },
-
-    deleteSeccion(id) {
-        showConfirm('¿Está seguro de que desea desactivar esta sección?', async () => {
-            try {
-                showLoading();
-                await apiCall('DELETE', `/admin/secciones?id=${id}`);
-                showToast('Sección desactivada exitosamente', 'success');
-                this.loadSecciones();
-            } catch (error) {
-                showToast(error.message || 'Error al desactivar la sección', 'error');
-            } finally {
-                hideLoading();
-            }
-        });
+        showToast('Sección registrada exitosamente', 'success');
+        closeModal();
+        this.loadSecciones();
     },
 
     // ============================================
@@ -2640,13 +2110,7 @@ const adminApp = {
                                 <input type="text" class="form-control" id="configAnioEscolar" placeholder="Ej: 2024-2025">
                             </div>
                         </div>
-                        <h4 style="margin-top:1.5rem;margin-bottom:1rem;color:var(--gray-700);">📍 Ubicación de la Institución</h4>
-                        <div style="margin-bottom:1rem;">
-                            <button type="button" class="btn btn-outline" onclick="adminApp.showMapSelector()" style="display:flex;align-items:center;gap:0.5rem;">
-                                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                                Seleccionar Ubicación en Mapa
-                            </button>
-                        </div>
+                        <h4 style="margin-top:1.5rem;margin-bottom:1rem;color:var(--gray-700);">Ubicación (Coordenadas del Mapa)</h4>
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="configLatitud">Latitud</label>
@@ -2660,9 +2124,8 @@ const adminApp = {
                         <div class="form-group">
                             <label for="configRadioPermitido">Radio Permitido (metros)</label>
                             <input type="number" class="form-control" id="configRadioPermitido" placeholder="Ej: 200" min="10" max="5000">
-                            <small style="color:var(--gray-500);">Distancia máxima permitida para registrar asistencia (recomendado: 150-200m)</small>
+                            <small style="color:var(--gray-500);">Distancia máxima permitida para registrar asistencia</small>
                         </div>
-                        <div id="mapPreview" style="height:200px;border-radius:0.5rem;border:1px solid var(--gray-200);margin-bottom:1rem;display:none;"></div>
                         <div class="form-group" style="margin-top:1.5rem;">
                             <button type="submit" class="btn btn-primary">
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
@@ -2691,11 +2154,6 @@ const adminApp = {
                 setVal('configLatitud', c.latitud);
                 setVal('configLongitud', c.longitud);
                 setVal('configRadioPermitido', c.radio_permitido);
-
-                // Show map preview if coordinates exist
-                if (c.latitud && c.longitud) {
-                    this.showMapPreview();
-                }
             }
         } catch (error) {
             console.warn('No se pudo cargar la configuración:', error);
@@ -2725,173 +2183,6 @@ const adminApp = {
         } finally {
             hideLoading();
         }
-    },
-
-    // ============================================
-    // MAPA - Selector de ubicación
-    // ============================================
-    showMapSelector() {
-        const lat = parseFloat(document.getElementById('configLatitud')?.value) || 10.4806;
-        const lng = parseFloat(document.getElementById('configLongitud')?.value) || -66.9036;
-        const radio = parseInt(document.getElementById('configRadioPermitido')?.value) || 200;
-
-        const content = `
-            <div style="text-align:center;margin-bottom:0.75rem;">
-                <p style="font-size:0.8125rem;color:var(--gray-500);">Haga clic en el mapa para seleccionar la ubicación de la institución</p>
-            </div>
-            <div id="mapSelectorContainer" style="height:400px;border-radius:0.5rem;border:1px solid var(--gray-200);"></div>
-            <div style="margin-top:0.75rem;display:flex;justify-content:space-between;align-items:center;">
-                <span id="mapCoords" style="font-size:0.8125rem;color:var(--gray-500);">Lat: ${lat}, Lng: ${lng}</span>
-                <button type="button" class="btn btn-outline btn-sm" onclick="adminApp.useCurrentLocation()">📍 Usar Mi Ubicación</button>
-            </div>
-        `;
-
-        const footer = `
-            <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
-            <button class="btn btn-primary" onclick="adminApp.confirmMapLocation()">Confirmar Ubicación</button>
-        `;
-
-        showModal('Seleccionar Ubicación', content, footer);
-
-        // Load Leaflet dynamically
-        this.initMapSelector(lat, lng, radio);
-    },
-
-    async initMapSelector(lat, lng, radio) {
-        // Load Leaflet CSS
-        if (!document.getElementById('leafletCSS')) {
-            const link = document.createElement('link');
-            link.id = 'leafletCSS';
-            link.rel = 'stylesheet';
-            link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-            document.head.appendChild(link);
-        }
-
-        // Load Leaflet JS
-        if (!window.L) {
-            await new Promise((resolve, reject) => {
-                const script = document.createElement('script');
-                script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-                script.onload = resolve;
-                script.onerror = reject;
-                document.head.appendChild(script);
-            });
-        }
-
-        setTimeout(() => {
-            const container = document.getElementById('mapSelectorContainer');
-            if (!container || !window.L) return;
-
-            this._map = L.map('mapSelectorContainer').setView([lat, lng], 16);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; OpenStreetMap'
-            }).addTo(this._map);
-
-            this._mapMarker = L.marker([lat, lng], {draggable: true}).addTo(this._map);
-            this._mapCircle = L.circle([lat, lng], {radius: radio, color: '#2563eb', fillColor: '#2563eb', fillOpacity: 0.15}).addTo(this._map);
-
-            this._map.on('click', (e) => {
-                this._mapMarker.setLatLng(e.latlng);
-                this._mapCircle.setLatLng(e.latlng);
-                this._selectedLat = e.latlng.lat;
-                this._selectedLng = e.latlng.lng;
-                document.getElementById('mapCoords').textContent = `Lat: ${e.latlng.lat.toFixed(6)}, Lng: ${e.latlng.lng.toFixed(6)}`;
-            });
-
-            this._mapMarker.on('dragend', (e) => {
-                const pos = e.target.getLatLng();
-                this._mapCircle.setLatLng(pos);
-                this._selectedLat = pos.lat;
-                this._selectedLng = pos.lng;
-                document.getElementById('mapCoords').textContent = `Lat: ${pos.lat.toFixed(6)}, Lng: ${pos.lng.toFixed(6)}`;
-            });
-
-            this._selectedLat = lat;
-            this._selectedLng = lng;
-        }, 300);
-    },
-
-    useCurrentLocation() {
-        if (!navigator.geolocation) {
-            showToast('Geolocalización no disponible', 'error');
-            return;
-        }
-        navigator.geolocation.getCurrentPosition(
-            (pos) => {
-                const lat = pos.coords.latitude;
-                const lng = pos.coords.longitude;
-                if (this._map && this._mapMarker) {
-                    this._map.setView([lat, lng], 16);
-                    this._mapMarker.setLatLng([lat, lng]);
-                    this._mapCircle.setLatLng([lat, lng]);
-                    this._selectedLat = lat;
-                    this._selectedLng = lng;
-                    document.getElementById('mapCoords').textContent = `Lat: ${lat.toFixed(6)}, Lng: ${lng.toFixed(6)}`;
-                }
-            },
-            (err) => showToast('No se pudo obtener la ubicación: ' + err.message, 'error'),
-            { enableHighAccuracy: true, timeout: 15000 }
-        );
-    },
-
-    confirmMapLocation() {
-        if (this._selectedLat && this._selectedLng) {
-            document.getElementById('configLatitud').value = this._selectedLat;
-            document.getElementById('configLongitud').value = this._selectedLng;
-        }
-        if (this._map) {
-            this._map.remove();
-            this._map = null;
-        }
-        closeModal();
-        showToast('Ubicación actualizada', 'success');
-
-        // Show mini preview map
-        this.showMapPreview();
-    },
-
-    async showMapPreview() {
-        const lat = parseFloat(document.getElementById('configLatitud')?.value);
-        const lng = parseFloat(document.getElementById('configLongitud')?.value);
-        const radio = parseInt(document.getElementById('configRadioPermitido')?.value) || 200;
-        const previewEl = document.getElementById('mapPreview');
-
-        if (!lat || !lng || !previewEl) return;
-
-        // Load Leaflet if not loaded
-        if (!window.L) {
-            if (!document.getElementById('leafletCSS')) {
-                const link = document.createElement('link');
-                link.id = 'leafletCSS';
-                link.rel = 'stylesheet';
-                link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-                document.head.appendChild(link);
-            }
-            await new Promise((resolve, reject) => {
-                const script = document.createElement('script');
-                script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-                script.onload = resolve;
-                script.onerror = reject;
-                document.head.appendChild(script);
-            });
-        }
-
-        previewEl.style.display = 'block';
-
-        // Remove existing preview map if any
-        if (this._previewMap) {
-            this._previewMap.remove();
-            this._previewMap = null;
-        }
-
-        setTimeout(() => {
-            this._previewMap = L.map('mapPreview').setView([lat, lng], 16);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; OpenStreetMap'
-            }).addTo(this._previewMap);
-            L.marker([lat, lng]).addTo(this._previewMap);
-            L.circle([lat, lng], {radius: radio, color: '#2563eb', fillColor: '#2563eb', fillOpacity: 0.15}).addTo(this._previewMap);
-        }, 200);
     },
 
     // ============================================
@@ -3119,9 +2410,6 @@ window.navigateTo = function(view) {
             break;
         case 'secciones':
             adminApp.loadSecciones();
-            break;
-        case 'profesores-horario':
-            adminApp.loadProfesoresHorario();
             break;
         case 'lapsos':
             adminApp.loadLapsos();

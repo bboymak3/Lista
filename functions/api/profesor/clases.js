@@ -1,4 +1,4 @@
-// api/profesor/clases.js - Professor's classes, sessions, and weekly schedule
+// api/profesor/clases.js - Professor's classes and sessions
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
@@ -16,13 +16,14 @@ function checkProfesor(user) {
   return user && (user.rol === 'profesor' || user.rol === 'admin');
 }
 
-// Map JS day (0=Sunday) to database dia_semana (1=Monday, 7=Sunday)
+// Map JS day (0=Sunday) to database dia_semana
 function getDiaSemana() {
+  const days = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
   const jsDay = new Date().getDay();
-  return jsDay === 0 ? 7 : jsDay;
+  return days[jsDay];
 }
 
-// GET - Get professor's schedules
+// GET - Get professor's schedules for today with student count, or session history
 async function handleGet(request, env, user) {
   if (!checkProfesor(user)) {
     return jsonResponse({ error: 'Acceso denegado. Se requiere rol profesor.' }, 403);
@@ -42,30 +43,21 @@ async function handleGet(request, env, user) {
 
       const { results } = await env.DB.prepare(
         `SELECT s.*, sub.nombre as materia_nombre, sub.codigo as materia_codigo,
-                sec.id as seccion_id, sec.nombre as seccion_nombre, sec.grado as seccion_grado, sec.turno as seccion_turno,
                 (SELECT COUNT(*) FROM schedule_students ss WHERE ss.horario_id = s.id) as total_estudiantes
          FROM schedules s
          LEFT JOIN subjects sub ON s.materia_id = sub.id
-         LEFT JOIN sections sec ON s.seccion_id = sec.id
          WHERE s.profesor_id = ? AND s.dia_semana = ? AND s.activo = 1
          ORDER BY s.hora_inicio`
       )
         .bind(profesor_id, diaSemana)
         .all();
 
-      // Add section display info and check for existing sessions today
+      // Check for existing sessions today
       const today = new Date().toISOString().split('T')[0];
       for (const schedule of results) {
-        // Build section display string
-        if (schedule.seccion_grado && schedule.seccion_nombre) {
-          schedule.seccion = `${schedule.seccion_grado}° "${schedule.seccion_nombre}"`;
-        } else {
-          schedule.seccion = '-';
-        }
-
         const session = await env.DB.prepare(
-          `SELECT id, estado, hora_inicio, hora_fin, qr_code FROM attendance_sessions
-           WHERE horario_id = ? AND fecha = ?`
+          `SELECT id, estado, fecha_inicio, fecha_fin FROM attendance_sessions
+           WHERE horario_id = ? AND DATE(fecha_inicio) = ?`
         )
           .bind(schedule.id, today)
           .first();
@@ -74,41 +66,6 @@ async function handleGet(request, env, user) {
       }
 
       return jsonResponse({ clases: results, dia: diaSemana, fecha: today });
-
-    } else if (action === 'semana') {
-      // Get full weekly schedule for the professor
-      const { results } = await env.DB.prepare(
-        `SELECT s.*, sub.nombre as materia_nombre, sub.codigo as materia_codigo,
-                sec.id as seccion_id, sec.nombre as seccion_nombre, sec.grado as seccion_grado, sec.turno as seccion_turno,
-                (SELECT COUNT(*) FROM schedule_students ss WHERE ss.horario_id = s.id) as total_estudiantes
-         FROM schedules s
-         LEFT JOIN subjects sub ON s.materia_id = sub.id
-         LEFT JOIN sections sec ON s.seccion_id = sec.id
-         WHERE s.profesor_id = ? AND s.activo = 1
-         ORDER BY s.dia_semana, s.hora_inicio`
-      )
-        .bind(profesor_id)
-        .all();
-
-      // Add section display info
-      results.forEach(s => {
-        if (s.seccion_grado && s.seccion_nombre) {
-          s.seccion = `${s.seccion_grado}° "${s.seccion_nombre}"`;
-        } else {
-          s.seccion = '-';
-        }
-      });
-
-      // Organize by day
-      const dias = { 1: 'Lunes', 2: 'Martes', 3: 'Miércoles', 4: 'Jueves', 5: 'Viernes', 6: 'Sábado', 7: 'Domingo' };
-      const horarioPorDia = {};
-      results.forEach(r => {
-        const dia = r.dia_semana;
-        if (!horarioPorDia[dia]) horarioPorDia[dia] = [];
-        horarioPorDia[dia].push(r);
-      });
-
-      return jsonResponse({ clases: results, horarioPorDia, dias });
 
     } else if (action === 'historial') {
       // Get session history for professor
@@ -124,18 +81,12 @@ async function handleGet(request, env, user) {
 
       const { results } = await env.DB.prepare(
         `SELECT ats.*, s.dia_semana, s.hora_inicio, s.hora_fin, s.aula,
-                sub.nombre as materia_nombre, sub.codigo as materia_codigo,
-                sec.nombre as seccion_nombre, sec.grado as seccion_grado,
-                (SELECT COUNT(*) FROM attendance_records ar WHERE ar.sesion_id = ats.id AND ar.estado = 'presente') as presentes,
-                (SELECT COUNT(*) FROM attendance_records ar WHERE ar.sesion_id = ats.id AND ar.estado = 'ausente') as ausentes,
-                (SELECT COUNT(*) FROM attendance_records ar WHERE ar.sesion_id = ats.id AND ar.estado = 'tardanza') as tardanzas,
-                (SELECT COUNT(*) FROM attendance_records ar WHERE ar.sesion_id = ats.id) as total
+                sub.nombre as materia_nombre, sub.codigo as materia_codigo
          FROM attendance_sessions ats
          INNER JOIN schedules s ON ats.horario_id = s.id
          LEFT JOIN subjects sub ON s.materia_id = sub.id
-         LEFT JOIN sections sec ON s.seccion_id = sec.id
          WHERE s.profesor_id = ?
-         ORDER BY ats.fecha_creacion DESC
+         ORDER BY ats.fecha_inicio DESC
          LIMIT ? OFFSET ?`
       )
         .bind(profesor_id, limit, offset)
@@ -155,29 +106,19 @@ async function handleGet(request, env, user) {
       // Get all schedules for the professor (not just today)
       const { results } = await env.DB.prepare(
         `SELECT s.*, sub.nombre as materia_nombre, sub.codigo as materia_codigo,
-                sec.id as seccion_id, sec.nombre as seccion_nombre, sec.grado as seccion_grado, sec.turno as seccion_turno,
                 (SELECT COUNT(*) FROM schedule_students ss WHERE ss.horario_id = s.id) as total_estudiantes
          FROM schedules s
          LEFT JOIN subjects sub ON s.materia_id = sub.id
-         LEFT JOIN sections sec ON s.seccion_id = sec.id
          WHERE s.profesor_id = ? AND s.activo = 1
          ORDER BY s.dia_semana, s.hora_inicio`
       )
         .bind(profesor_id)
         .all();
 
-      results.forEach(s => {
-        if (s.seccion_grado && s.seccion_nombre) {
-          s.seccion = `${s.seccion_grado}° "${s.seccion_nombre}"`;
-        } else {
-          s.seccion = '-';
-        }
-      });
-
       return jsonResponse({ clases: results });
 
     } else {
-      return jsonResponse({ error: 'Acción no válida. Use: hoy, semana, historial, todos' }, 400);
+      return jsonResponse({ error: 'Acción no válida. Use: hoy, historial, todos' }, 400);
     }
   } catch (error) {
     console.error('Get professor classes error:', error);

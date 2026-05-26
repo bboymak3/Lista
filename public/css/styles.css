@@ -2203,3 +2203,279 @@ textarea.form-control {
 .grid { display: grid; }
 .hidden { display: none !important; }
 .w-full { width: 100%; }
+
+/* ============================================
+   ATTENDANCE CHECKBOX UI - Presente/Ausente
+   ============================================ */
+
+/* --- Attendance Summary Cards --- */
+.attendance-summary {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+}
+
+.attendance-summary-card {
+    text-align: center;
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+}
+
+.attendance-summary-card.presente {
+    background: var(--secondary-light);
+    border-color: rgba(16, 185, 129, 0.2);
+}
+
+.attendance-summary-card.ausente {
+    background: var(--danger-light);
+    border-color: rgba(239, 68, 68, 0.2);
+}
+
+.attendance-summary-card.total {
+    background: var(--primary-lighter);
+    border-color: rgba(37, 99, 235, 0.2);
+}
+
+.attendance-summary-number {
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.attendance-summary-card.presente .attendance-summary-number {
+    color: var(--secondary-dark);
+}
+
+.attendance-summary-card.ausente .attendance-summary-number {
+    color: var(--danger-dark);
+}
+
+.attendance-summary-card.total .attendance-summary-number {
+    color: var(--primary);
+}
+
+.attendance-summary-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--gray-500);
+    margin-top: 0.125rem;
+}
+
+/* --- Quick Actions --- */
+.attendance-quick-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+/* --- Attendance Item Row (Numbered) --- */
+.attendance-item-number {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--gray-100);
+    color: var(--gray-500);
+    font-size: 0.75rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.attendance-item.is-presente {
+    border-left: 3px solid var(--secondary);
+    background: linear-gradient(90deg, rgba(16, 185, 129, 0.03) 0%, var(--surface) 20%);
+}
+
+.attendance-item.is-ausente {
+    border-left: 3px solid var(--danger);
+    background: linear-gradient(90deg, rgba(239, 68, 68, 0.05) 0%, var(--surface) 20%);
+}
+
+/* --- Checkbox-based Attendance Controls --- */
+.attendance-checkboxes {
+    display: flex;
+    gap: 0.375rem;
+    flex-shrink: 0;
+}
+
+.attendance-check {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius);
+    border: 2px solid var(--gray-200);
+    background: var(--surface);
+    cursor: pointer;
+    transition: all var(--transition);
+    user-select: none;
+    position: relative;
+}
+
+.attendance-check input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+}
+
+.attendance-check .check-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    transition: all var(--transition);
+}
+
+.attendance-check .check-label {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    transition: color var(--transition);
+}
+
+/* Presente checkbox */
+.check-presente {
+    border-color: var(--gray-200);
+}
+
+.check-presente .check-icon {
+    color: var(--gray-400);
+}
+
+.check-presente .check-label {
+    color: var(--gray-400);
+}
+
+.check-presente.active {
+    border-color: var(--secondary);
+    background: var(--secondary-light);
+}
+
+.check-presente.active .check-icon {
+    color: white;
+    background: var(--secondary);
+}
+
+.check-presente.active .check-label {
+    color: var(--secondary-dark);
+}
+
+/* Ausente checkbox */
+.check-ausente {
+    border-color: var(--gray-200);
+}
+
+.check-ausente .check-icon {
+    color: var(--gray-400);
+}
+
+.check-ausente .check-label {
+    color: var(--gray-400);
+}
+
+.check-ausente.active {
+    border-color: var(--danger);
+    background: var(--danger-light);
+}
+
+.check-ausente.active .check-icon {
+    color: white;
+    background: var(--danger);
+}
+
+.check-ausente.active .check-label {
+    color: var(--danger-dark);
+}
+
+/* Hover effects */
+.attendance-check:hover {
+    border-color: var(--gray-300);
+    background: var(--gray-50);
+}
+
+.check-presente:hover {
+    border-color: var(--secondary);
+}
+
+.check-ausente:hover {
+    border-color: var(--danger);
+}
+
+/* --- Save Bar (Sticky) --- */
+.attendance-save-bar {
+    position: sticky;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    box-shadow: 0 -4px 12px rgba(0,0,0,0.08);
+    margin-top: 1rem;
+    z-index: 10;
+}
+
+.save-bar-info {
+    font-size: 0.875rem;
+    color: var(--gray-600);
+    font-weight: 500;
+}
+
+/* --- Schedule Cards Grid --- */
+.schedule-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+}
+
+/* --- Responsive --- */
+@media (max-width: 640px) {
+    .attendance-summary {
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 0.5rem;
+    }
+    
+    .attendance-summary-number {
+        font-size: 1.25rem;
+    }
+    
+    .attendance-item {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    
+    .attendance-checkboxes {
+        width: 100%;
+        justify-content: flex-end;
+    }
+    
+    .attendance-quick-actions {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    
+    .attendance-save-bar {
+        flex-direction: column;
+        gap: 0.5rem;
+        text-align: center;
+    }
+}
+
+/* --- Badge-secondary for finished sessions --- */
+.badge-secondary {
+    background: var(--gray-100);
+    color: var(--gray-500);
+}

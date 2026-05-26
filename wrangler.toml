@@ -1,15 +1,12 @@
-name = "lista"
+name = "sistema-asistencia-escolar"
 compatibility_date = "2024-01-01"
 pages_build_output_dir = "public"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "lista_db"
-database_id = "25b87c1b-c6fd-4dfc-8858-5a25388723a6"
+database_name = "sistema-asistencia-db"
+database_id = "REEMPLAZAR_CON_TU_DATABASE_ID"
 
 [[r2_buckets]]
 binding = "BUCKET"
-bucket_name = "my-emdash-media"
-
-[vars]
-JWT_SECRET = "lista_jwt_secret_2024_super_secure_key_xyz"
+bucket_name = "sistema-asistencia-fotos"

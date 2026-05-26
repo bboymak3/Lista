@@ -88,7 +88,7 @@ export async function onRequest(context) {
     const jwtSecret = env.JWT_SECRET || 'default-secret-change-me';
     const hashedPassword = await hashPassword(password, jwtSecret);
 
-    if (hashedPassword !== user.password_hash) {
+    if (hashedPassword !== user.password) {
       return jsonResponse({ error: 'Credenciales inválidas' }, 401);
     }
 

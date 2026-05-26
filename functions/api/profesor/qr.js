@@ -54,7 +54,7 @@ async function handleGet(request, env, user) {
 
     // Check if there's an active session for this horario today
     const activeSession = await env.DB.prepare(
-      `SELECT * FROM attendance_sessions WHERE horario_id = ? AND profesor_id = ? AND fecha = ? AND estado = 'en_curso'`
+      `SELECT * FROM attendance_sessions WHERE horario_id = ? AND profesor_id = ? AND DATE(fecha) = ? AND estado = 'en_curso'`
     )
       .bind(horario_id, user.id, today)
       .first();

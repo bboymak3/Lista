@@ -76,7 +76,7 @@ async function handleStartSession(request, env, user) {
     // Check if there's already an active session for this schedule today
     const today = new Date().toISOString().split('T')[0];
     const existingSession = await env.DB.prepare(
-      `SELECT id FROM attendance_sessions WHERE horario_id = ? AND estado = 'activa' AND DATE(fecha_inicio) = ?`
+      `SELECT id FROM attendance_sessions WHERE horario_id = ? AND estado = 'en_curso' AND fecha = ?`
     )
       .bind(horario_id, today)
       .first();
@@ -86,9 +86,9 @@ async function handleStartSession(request, env, user) {
     }
 
     const result = await env.DB.prepare(
-      `INSERT INTO attendance_sessions (horario_id, estado, fecha_inicio) VALUES (?, 'activa', datetime("now"))`
+      `INSERT INTO attendance_sessions (horario_id, profesor_id, fecha, hora_inicio, estado, latitud, longitud) VALUES (?, ?, ?, ?, 'en_curso', ?, ?)`
     )
-      .bind(horario_id)
+      .bind(horario_id, user.id, today, new Date().toTimeString().split(' ')[0], latitud, longitud)
       .run();
 
     const session = await env.DB.prepare('SELECT * FROM attendance_sessions WHERE id = ?')
@@ -135,9 +135,8 @@ async function handleGetStudents(request, env, user) {
 
     // Get students assigned to this schedule
     const { results } = await env.DB.prepare(
-      `SELECT s.id, s.nombre, s.apellido, s.codigo_unico, s.grado, s.seccion, s.foto,
-              COALESCE(ar.estado, 'sin_registro') as estado_asistencia,
-              ar.id as registro_id
+      `SELECT s.id, s.nombre, s.apellido, s.codigo_unico, s.grado, s.seccion, s.foto_key,
+              COALESCE(ar.estado, 'sin_registro') as estado_asistencia
        FROM schedule_students ss
        INNER JOIN students s ON ss.estudiante_id = s.id
        LEFT JOIN attendance_records ar ON ar.estudiante_id = s.id AND ar.sesion_id = ?
@@ -185,7 +184,7 @@ async function handleRecordAttendance(request, env, user) {
       return jsonResponse({ error: 'No tiene acceso a esta sesión' }, 403);
     }
 
-    if (session.estado !== 'activa') {
+    if (session.estado !== 'en_curso') {
       return jsonResponse({ error: 'La sesión no está activa' }, 400);
     }
 
@@ -228,17 +227,17 @@ async function handleRecordAttendance(request, env, user) {
       if (existingRecord) {
         // Update existing record
         await env.DB.prepare(
-          'UPDATE attendance_records SET estado = ?, observacion = ? WHERE id = ?'
+          'UPDATE attendance_records SET estado = ?, observaciones = ? WHERE id = ?'
         )
           .bind(estado, observacion || null, existingRecord.id)
           .run();
       } else {
         // Create new record
         await env.DB.prepare(
-          `INSERT INTO attendance_records (sesion_id, estudiante_id, estado, observacion, fecha_registro)
-           VALUES (?, ?, ?, ?, datetime("now"))`
+          `INSERT INTO attendance_records (sesion_id, estudiante_id, estado, observaciones, registrado_por)
+           VALUES (?, ?, ?, ?, ?)`
         )
-          .bind(sesion_id, estudiante_id, estado, observacion || null)
+          .bind(sesion_id, estudiante_id, estado, observacion || null, user.id)
           .run();
       }
 
@@ -329,14 +328,14 @@ async function handleEndSession(request, env, user) {
       return jsonResponse({ error: 'No tiene acceso a esta sesión' }, 403);
     }
 
-    if (session.estado !== 'activa') {
+    if (session.estado !== 'en_curso') {
       return jsonResponse({ error: 'La sesión ya no está activa' }, 400);
     }
 
     await env.DB.prepare(
-      `UPDATE attendance_sessions SET estado = 'cerrada', fecha_fin = datetime("now") WHERE id = ?`
+      `UPDATE attendance_sessions SET estado = 'finalizada', hora_fin = ? WHERE id = ?`
     )
-      .bind(sesion_id)
+      .bind(new Date().toTimeString().split(' ')[0], sesion_id)
       .run();
 
     const updatedSession = await env.DB.prepare('SELECT * FROM attendance_sessions WHERE id = ?')

@@ -24,18 +24,6 @@ async function findStudentForUser(env, user) {
     .bind(user.cedula)
     .first();
 
-  if (!student) {
-    try {
-      student = await env.DB.prepare(
-        'SELECT id FROM students WHERE user_id = ? AND activo = 1'
-      )
-        .bind(user.id)
-        .first();
-    } catch (e) {
-      // user_id column may not exist
-    }
-  }
-
   return student;
 }
 

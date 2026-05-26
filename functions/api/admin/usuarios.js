@@ -107,7 +107,7 @@ async function handlePost(request, env, user) {
     const hashedPassword = await hashPassword(password, jwtSecret);
 
     const result = await env.DB.prepare(
-      'INSERT INTO users (cedula, password, rol, nombre, apellido, email, telefono, activo, fecha_creacion) VALUES (?, ?, ?, ?, ?, ?, ?, 1, datetime("now"))'
+      'INSERT INTO users (cedula, password_hash, rol, nombre, apellido, email, telefono, activo) VALUES (?, ?, ?, ?, ?, ?, ?, 1)'
     )
       .bind(cedula, hashedPassword, rol, nombre, apellido, email || null, telefono || null)
       .run();
@@ -146,13 +146,13 @@ async function handlePut(request, env, user) {
     }
 
     const jwtSecret = env.JWT_SECRET || 'default-secret-change-me';
-    let hashedPassword = existing.password;
+    let hashedPassword = existing.password_hash;
     if (password) {
       hashedPassword = await hashPassword(password, jwtSecret);
     }
 
     await env.DB.prepare(
-      'UPDATE users SET cedula = ?, rol = ?, nombre = ?, apellido = ?, email = ?, telefono = ?, password = ? WHERE id = ?'
+      'UPDATE users SET cedula = ?, rol = ?, nombre = ?, apellido = ?, email = ?, telefono = ?, password_hash = ? WHERE id = ?'
     )
       .bind(
         cedula || existing.cedula,

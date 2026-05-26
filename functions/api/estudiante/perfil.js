@@ -22,9 +22,9 @@ async function handleGet(request, env, user) {
     // If user is a student, find their own profile
     if (user.rol === 'estudiante') {
       const student = await env.DB.prepare(
-        'SELECT id FROM students WHERE cedula_escolar = ? OR user_id = ?'
+        'SELECT id FROM students WHERE cedula_escolar = ?'
       )
-        .bind(user.cedula, user.id)
+        .bind(user.cedula)
         .first();
       if (student) {
         targetStudentId = student.id;
@@ -96,16 +96,16 @@ async function handleGet(request, env, user) {
 async function handlePut(request, env, user) {
   try {
     const body = await request.json();
-    const { id, direccion, telefono_emergencia, contacto_emergencia, foto } = body;
+    const { id, direccion, telefono_emergencia, foto } = body;
 
     let targetStudentId = id;
 
     // If user is a student, they can only update their own profile
     if (user.rol === 'estudiante') {
       const student = await env.DB.prepare(
-        'SELECT id FROM students WHERE cedula_escolar = ? OR user_id = ?'
+        'SELECT id FROM students WHERE cedula_escolar = ?'
       )
-        .bind(user.cedula, user.id)
+        .bind(user.cedula)
         .first();
       if (student) {
         targetStudentId = student.id;
@@ -131,7 +131,7 @@ async function handlePut(request, env, user) {
       return jsonResponse({ error: 'Estudiante no encontrado' }, 404);
     }
 
-    let fotoKey = existing.foto;
+    let fotoKey = existing.foto_key;
     if (foto) {
       try {
         const base64Data = foto.split(',')[1] || foto;
@@ -144,8 +144,8 @@ async function handlePut(request, env, user) {
         await env.BUCKET.put(fotoKey, bytes, {
           httpMetadata: { contentType: 'image/jpeg' },
         });
-        if (existing.foto) {
-          await env.BUCKET.delete(existing.foto);
+        if (existing.foto_key) {
+          await env.BUCKET.delete(existing.foto_key);
         }
       } catch (uploadError) {
         console.error('Photo upload error:', uploadError);
@@ -153,12 +153,11 @@ async function handlePut(request, env, user) {
     }
 
     await env.DB.prepare(
-      `UPDATE students SET direccion = ?, telefono_emergencia = ?, contacto_emergencia = ?, foto = ? WHERE id = ?`
+      `UPDATE students SET direccion = ?, telefono_emergencia = ?, foto_key = ? WHERE id = ?`
     )
       .bind(
         direccion !== undefined ? direccion : existing.direccion,
         telefono_emergencia !== undefined ? telefono_emergencia : existing.telefono_emergencia,
-        contacto_emergencia !== undefined ? contacto_emergencia : existing.contacto_emergencia,
         fotoKey,
         targetStudentId
       )

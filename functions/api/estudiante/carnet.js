@@ -34,9 +34,9 @@ async function handleGet(request, env, user) {
 
     // If user is a student, they can only see their own data
     if (user.rol === 'estudiante') {
-      // Look up student by user's cedula or linked account
-      const student = await env.DB.prepare('SELECT id FROM students WHERE cedula_escolar = ? OR user_id = ?')
-        .bind(user.cedula, user.id)
+      // Look up student by user's cedula matching cedula_escolar
+      const student = await env.DB.prepare('SELECT id FROM students WHERE cedula_escolar = ?')
+        .bind(user.cedula)
         .first();
       if (student) {
         targetStudentId = student.id;
@@ -65,8 +65,8 @@ async function handleGet(request, env, user) {
     if (action === 'carnet') {
       // Get student carnet data
       const student = await env.DB.prepare(
-        `SELECT id, cedula_escolar, nombre, apellido, fecha_nacimiento, grado, seccion,
-                direccion, telefono_emergencia, contacto_emergencia, codigo_unico, qr_code, foto
+        `SELECT id, cedula_escolar, nombre, apellido, fecha_nacimiento, grado, seccion, turno,
+                direccion, telefono_emergencia, codigo_unico, qr_code, foto_key
          FROM students WHERE id = ? AND activo = 1`
       )
         .bind(targetStudentId)

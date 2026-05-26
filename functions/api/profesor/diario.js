@@ -115,8 +115,9 @@ async function handlePost(request, env, user) {
       return jsonResponse({ error: 'Ya registró su entrada el día de hoy', diario: existing }, 400);
     }
 
-    // Validate geolocation
+    // Validate geolocation (soft validation - warn but allow)
     let lat = latitud, lon = longitud;
+    let geoWarning = null;
     if (lat !== undefined && lon !== undefined) {
       const config = await env.DB.prepare(
         'SELECT latitud, longitud, radio_permitido FROM school_config ORDER BY id ASC LIMIT 1'
@@ -125,9 +126,7 @@ async function handlePost(request, env, user) {
       if (config) {
         const distance = haversineDistance(lat, lon, config.latitud, config.longitud);
         if (distance > config.radio_permitido) {
-          return jsonResponse({
-            error: `Fuera del rango permitido. Distancia: ${Math.round(distance)}m, permitido: ${config.radio_permitido}m`
-          }, 403);
+          geoWarning = `Fuera del rango permitido. Distancia: ${Math.round(distance)}m, permitido: ${config.radio_permitido}m`;
         }
       }
     }
@@ -141,7 +140,7 @@ async function handlePost(request, env, user) {
       'SELECT * FROM teacher_daily_log WHERE profesor_id = ? AND fecha = ?'
     ).bind(user.id, today).first();
 
-    return jsonResponse({ diario, message: 'Entrada registrada exitosamente' }, 201);
+    return jsonResponse({ diario, message: 'Entrada registrada exitosamente', geoWarning: geoWarning || undefined }, 201);
   } catch (error) {
     console.error('Check in error:', error);
     return jsonResponse({ error: 'Error al registrar entrada' }, 500);
@@ -175,8 +174,9 @@ async function handlePut(request, env, user) {
         return jsonResponse({ error: 'Ya registró su salida el día de hoy' }, 400);
       }
 
-      // Validate geolocation
+      // Validate geolocation (soft validation - warn but allow)
       let lat = latitud, lon = longitud;
+      let geoWarning = null;
       if (lat !== undefined && lon !== undefined) {
         const config = await env.DB.prepare(
           'SELECT latitud, longitud, radio_permitido FROM school_config ORDER BY id ASC LIMIT 1'
@@ -185,9 +185,7 @@ async function handlePut(request, env, user) {
         if (config) {
           const distance = haversineDistance(lat, lon, config.latitud, config.longitud);
           if (distance > config.radio_permitido) {
-            return jsonResponse({
-              error: `Fuera del rango permitido. Distancia: ${Math.round(distance)}m, permitido: ${config.radio_permitido}m`
-            }, 403);
+            geoWarning = `Fuera del rango permitido. Distancia: ${Math.round(distance)}m, permitido: ${config.radio_permitido}m`;
           }
         }
       }
@@ -200,7 +198,7 @@ async function handlePut(request, env, user) {
         'SELECT * FROM teacher_daily_log WHERE id = ?'
       ).bind(existing.id).first();
 
-      return jsonResponse({ diario: updated, message: 'Salida registrada exitosamente' });
+      return jsonResponse({ diario: updated, message: 'Salida registrada exitosamente', geoWarning: geoWarning || undefined });
 
     } else if (action === 'observaciones_clase') {
       // Add observations for a specific class session

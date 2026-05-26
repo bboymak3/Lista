@@ -3,18 +3,19 @@
 -- Base de Datos D1 (SQLite) - v2 COMPLETO
 -- ============================================
 
--- Tabla de Usuarios (Admin, Profesor, Representante)
+-- Tabla de Usuarios (Admin, Profesor, Representante, Estudiante)
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   cedula TEXT UNIQUE NOT NULL,
   nombre TEXT NOT NULL,
   apellido TEXT NOT NULL,
-  email TEXT UNIQUE NOT NULL,
+  email TEXT UNIQUE,
   password_hash TEXT NOT NULL,
-  rol TEXT NOT NULL CHECK(rol IN ('admin', 'profesor', 'representante')),
+  rol TEXT NOT NULL,
   telefono TEXT,
   foto_key TEXT,
   turno TEXT,
+  estudiante_id INTEGER,
   activo INTEGER DEFAULT 1,
   fecha_creacion TEXT DEFAULT (datetime('now')),
   fecha_actualizacion TEXT DEFAULT (datetime('now'))

@@ -26,6 +26,15 @@ function randomString(length) {
   return result;
 }
 
+// SHA-256 hash with salt (same as auth/login.js)
+async function hashPassword(password, salt) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(salt + password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 // GET - List students with pagination, filter by grado/seccion
 async function handleGet(request, env, user) {
   if (!checkAdmin(user)) {
@@ -165,7 +174,86 @@ async function handlePost(request, env, user) {
       .bind(result.meta.last_row_id)
       .first();
 
-    return jsonResponse({ student: newStudent, message: 'Estudiante creado exitosamente' }, 201);
+    // Auto-create estudiante user account for login
+    const studentCedula = cedula_escolar || `EST-${codigo_unico}`;
+    const studentPassword = randomString(6);
+    const studentHashedPassword = await hashPassword(studentPassword, env.JWT_SECRET || 'default-secret-change-me');
+
+    try {
+      await env.DB.prepare(
+        `INSERT OR IGNORE INTO users (cedula, nombre, apellido, email, password_hash, rol, telefono, activo, estudiante_id)
+         VALUES (?, ?, ?, ?, ?, 'estudiante', ?, 1, ?)`
+      ).bind(
+        studentCedula,
+        nombre,
+        apellido,
+        `${codigo_unico}@estudiante.lista`,
+        studentHashedPassword,
+        telefono_emergencia || null,
+        newStudent.id
+      ).run();
+    } catch (studentUserError) {
+      console.error('Error creating student user:', studentUserError);
+    }
+
+    // Auto-create representante user with access link
+    const repPassword = randomString(6);
+    const repHashedPassword = await hashPassword(repPassword, env.JWT_SECRET || 'default-secret-change-me');
+    const repCedula = `REP-${codigo_unico}`;
+
+    try {
+      await env.DB.prepare(
+        `INSERT OR IGNORE INTO users (cedula, nombre, apellido, email, password_hash, rol, telefono, activo)
+         VALUES (?, ?, ?, ?, ?, 'representante', ?, 1)`
+      ).bind(
+        repCedula,
+        `Representante de ${nombre}`,
+        apellido,
+        `${codigo_unico}@representante.lista`,
+        repHashedPassword,
+        body.telefono_representante || null
+      ).run();
+
+      const repUser = await env.DB.prepare('SELECT id FROM users WHERE cedula = ?').bind(repCedula).first();
+
+      if (repUser) {
+        // Link representante to student
+        await env.DB.prepare(
+          `INSERT OR IGNORE INTO parent_student (representante_id, estudiante_id, parentesco, es_principal) VALUES (?, ?, 'otro', 1)`
+        ).bind(repUser.id, newStudent.id).run();
+      }
+
+      // Generate access token
+      const accessToken = btoa(JSON.stringify({
+        estudiante_id: newStudent.id,
+        codigo: codigo_unico,
+        rep_cedula: repCedula,
+        rep_password: repPassword,
+        exp: Date.now() + 30 * 24 * 60 * 60 * 1000 // 30 days
+      }));
+
+      const origin = new URL(request.url).origin;
+      const repLink = `${origin}/pages/representante.html?token=${accessToken}`;
+
+      return jsonResponse({
+        student: newStudent,
+        message: 'Estudiante creado exitosamente',
+        estudiante: {
+          cedula: studentCedula,
+          password: studentPassword
+        },
+        representante: {
+          cedula: repCedula,
+          password: repPassword,
+          token: accessToken,
+          link: repLink
+        }
+      }, 201);
+    } catch (repError) {
+      console.error('Error creating representante:', repError);
+      // Still return success for student creation
+      return jsonResponse({ student: newStudent, message: 'Estudiante creado. Error al crear representante.' }, 201);
+    }
   } catch (error) {
     console.error('Create student error:', error);
     return jsonResponse({ error: 'Error al crear estudiante' }, 500);

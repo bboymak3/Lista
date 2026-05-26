@@ -40,26 +40,21 @@ async function handleStartSession(request, env, user) {
       return jsonResponse({ error: 'ID de horario es requerido' }, 400);
     }
 
-    // Validate geolocation against school_config
-    if (latitud === undefined || longitud === undefined) {
-      return jsonResponse({ error: 'Latitud y longitud son requeridas para validación de geolocalización' }, 400);
-    }
+    // Validate geolocation against school_config (soft validation - warn but allow)
+    let geoWarning = null;
+    let schoolCoords = null;
+    if (latitud !== undefined && longitud !== undefined) {
+      const schoolConfig = await env.DB.prepare(
+        'SELECT latitud, longitud, radio_permitido FROM school_config ORDER BY id ASC LIMIT 1'
+      ).first();
 
-    const schoolConfig = await env.DB.prepare(
-      'SELECT latitud, longitud, radio_permitido FROM school_config ORDER BY id ASC LIMIT 1'
-    ).first();
-
-    if (!schoolConfig) {
-      return jsonResponse({ error: 'No hay configuración de escuela registrada para validar geolocalización' }, 500);
-    }
-
-    const distance = haversineDistance(latitud, longitud, schoolConfig.latitud, schoolConfig.longitud);
-    if (distance > schoolConfig.radio_permitido) {
-      return jsonResponse({
-        error: `Fuera del rango permitido. Distancia: ${Math.round(distance)}m, permitido: ${schoolConfig.radio_permitido}m`,
-        distancia: Math.round(distance),
-        radio_permitido: schoolConfig.radio_permitido,
-      }, 403);
+      if (schoolConfig) {
+        schoolCoords = { latitud: schoolConfig.latitud, longitud: schoolConfig.longitud, radio_permitido: schoolConfig.radio_permitido };
+        const distance = haversineDistance(latitud, longitud, schoolConfig.latitud, schoolConfig.longitud);
+        if (distance > schoolConfig.radio_permitido) {
+          geoWarning = `Fuera del rango permitido. Distancia: ${Math.round(distance)}m, permitido: ${schoolConfig.radio_permitido}m`;
+        }
+      }
     }
 
     // Validate schedule belongs to this professor
@@ -95,7 +90,12 @@ async function handleStartSession(request, env, user) {
       .bind(result.meta.last_row_id)
       .first();
 
-    return jsonResponse({ sesion: session, message: 'Sesión de asistencia iniciada' }, 201);
+    return jsonResponse({
+      sesion: session,
+      message: 'Sesión de asistencia iniciada',
+      geoWarning: geoWarning || undefined,
+      schoolCoords: schoolCoords || undefined,
+    }, 201);
   } catch (error) {
     console.error('Start session error:', error);
     return jsonResponse({ error: 'Error al iniciar sesión de asistencia' }, 500);

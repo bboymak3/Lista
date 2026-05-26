@@ -82,6 +82,9 @@ const profesorApp = {
             showLoading();
             const geo = await this.getGeolocation();
             const data = await apiCall('POST', '/profesor/diario', geo);
+            if (data.geoWarning) {
+                showToast('⚠️ ' + data.geoWarning, 'warning');
+            }
             showToast('Entrada registrada exitosamente', 'success');
             await this.checkDiarioStatus();
         } catch (e) {
@@ -94,6 +97,9 @@ const profesorApp = {
             showLoading();
             const geo = await this.getGeolocation();
             const data = await apiCall('PUT', '/profesor/diario', geo);
+            if (data.geoWarning) {
+                showToast('⚠️ ' + data.geoWarning, 'warning');
+            }
             showToast('Salida registrada exitosamente', 'success');
             await this.checkDiarioStatus();
         } catch (e) {
@@ -141,7 +147,7 @@ const profesorApp = {
                         <div><span style="color:var(--gray-400);">Aula:</span> ${escapeHtml(clase.aula||'Sin asignar')}</div>
                         <div style="grid-column:1/-1;"><span style="color:var(--gray-400);">Estudiantes:</span> ${totalEstudiantes}</div>
                     </div>
-                    <div style="margin-top:0.75rem;display:flex;justify-content:flex-end;gap:0.5rem;">${bototonAccion}
+                    <div style="margin-top:0.75rem;display:flex;justify-content:flex-end;gap:0.5rem;">${botonAccion}
                         ${!sesionCerrada ? `<button class="btn btn-outline btn-sm" onclick="profesorApp.showQRClase(${clase.id})">QR Clase</button>` : ''}
                     </div></div></div>`;
             }).join('') + '</div>';
@@ -166,6 +172,9 @@ const profesorApp = {
             this.horarioActivo = horarioId;
             this.asistenciaRegistrada = {};
             this.permitirEscaneoAlumnos = false;
+            if (data.geoWarning) {
+                showToast('⚠️ ' + data.geoWarning, 'warning');
+            }
             showToast('Sesión de asistencia iniciada', 'success');
             await this.loadAttendanceList(data.sesion.id);
             this.showActiveSessionPanel(data.sesion);
@@ -619,14 +628,15 @@ const profesorApp = {
                 return;
             }
             listEl.innerHTML = evaluaciones.map(ev => `<div class="card" style="margin-bottom:0.75rem;">
-                <div class="card-body" style="display:flex;justify-content:space-between;align-items:center;">
+                <div class="card-body" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
                     <div>
                         <h4 style="margin:0;font-size:0.9375rem;">${escapeHtml(ev.titulo)}</h4>
                         <p style="margin:0;font-size:0.8125rem;color:var(--gray-500);">${escapeHtml(ev.materia_nombre||'')} | ${escapeHtml(ev.lapso_nombre||'')} | Ponderación: ${ev.ponderacion||0}%</p>
                     </div>
-                    <div style="display:flex;gap:0.5rem;">
+                    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
                         <button class="btn btn-success btn-sm" onclick="profesorApp.showCalificarModal(${ev.id})">Calificar</button>
                         <button class="btn btn-outline btn-sm" onclick="profesorApp.showEvaluacionModal(${ev.id})">Editar</button>
+                        <button class="btn btn-success btn-sm" onclick="profesorApp.enviarCalificaciones(${ev.id})" title="Enviar calificaciones a representantes">📤 Enviar</button>
                         <button class="btn btn-danger btn-sm" onclick="profesorApp.deleteEvaluacion(${ev.id})">Eliminar</button>
                     </div>
                 </div>
@@ -634,27 +644,90 @@ const profesorApp = {
         } catch (e) { listEl.innerHTML = '<p style="color:var(--danger);">Error al cargar evaluaciones</p>'; }
     },
 
-    showEvaluacionModal(id = null) {
-        showModal(id ? 'Editar Evaluación' : 'Nueva Evaluación', `
+    async showEvaluacionModal(id = null) {
+        let evaluacion = null;
+        if (id) {
+            try {
+                const evalRes = await apiCall('GET', `/profesor/notas?action=evaluaciones&evaluacion_id=${id}`);
+                evaluacion = evalRes.evaluaciones?.[0] || null;
+                if (!evaluacion) {
+                    const allData = await apiCall('GET', '/profesor/notas');
+                    evaluacion = (allData.evaluaciones || []).find(e => e.id == id) || null;
+                }
+            } catch(e) {
+                try {
+                    const allData = await apiCall('GET', '/profesor/notas');
+                    evaluacion = (allData.evaluaciones || []).find(e => e.id == id) || null;
+                } catch(e2) {}
+            }
+        }
+
+        // Load materias and lapsos for dropdowns
+        let materias = [];
+        let lapsos = [];
+        try {
+            const clasesData = await apiCall('GET', '/profesor/clases?action=todos');
+            (clasesData.clases || []).forEach(c => {
+                if (!materias.find(m => m.id === c.materia_id)) {
+                    materias.push({ id: c.materia_id, nombre: c.materia_nombre });
+                }
+            });
+        } catch(e) {}
+
+        try {
+            const lapsosData = await apiCall('GET', '/admin/lapsos');
+            lapsos = lapsosData.lapsos || [];
+        } catch(e) {
+            try {
+                const lapsosData = await apiCall('GET', '/profesor/notas?action=lapsos');
+                lapsos = lapsosData.lapsos || [];
+            } catch(e2) {}
+        }
+
+        const content = `
             <form id="evalForm">
-                <input type="hidden" id="evalId" value="${id||''}">
-                <div class="form-group"><label>Título</label><input class="form-control" id="evalTitulo" required></div>
-                <div class="form-group"><label>Descripción</label><textarea class="form-control" id="evalDescripcion"></textarea></div>
+                <input type="hidden" id="evalId" value="${id || ''}">
+                <div class="form-group"><label>Título *</label><input class="form-control" id="evalTitulo" required value="${evaluacion?.titulo || ''}"></div>
+                <div class="form-group"><label>Descripción</label><textarea class="form-control" id="evalDescripcion">${evaluacion?.descripcion || ''}</textarea></div>
                 <div class="form-row">
-                    <div class="form-group"><label>Materia</label><input class="form-control" id="evalMateriaId" type="number" required></div>
-                    <div class="form-group"><label>Lapso</label><input class="form-control" id="evalLapsoId" type="number" required></div>
+                    <div class="form-group">
+                        <label>Materia *</label>
+                        <select class="form-control" id="evalMateriaId" required>
+                            <option value="">Seleccione</option>
+                            ${materias.map(m => `<option value="${m.id}" ${evaluacion?.materia_id == m.id ? 'selected' : ''}>${escapeHtml(m.nombre)}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Lapso *</label>
+                        <select class="form-control" id="evalLapsoId" required>
+                            <option value="">Seleccione</option>
+                            ${lapsos.map(l => `<option value="${l.id}" ${evaluacion?.lapso_id == l.id ? 'selected' : ''}>${escapeHtml(l.nombre)} (${l.periodo_escolar || ''})</option>`).join('')}
+                        </select>
+                    </div>
                 </div>
                 <div class="form-row">
-                    <div class="form-group"><label>Tipo</label><select class="form-control" id="evalTipo">
-                        <option value="examen">Examen</option><option value="trabajo">Trabajo</option>
-                        <option value="proyecto">Proyecto</option><option value="participacion">Participación</option>
-                    </select></div>
-                    <div class="form-group"><label>Ponderación (%)</label><input class="form-control" id="evalPonderacion" type="number" min="0" max="100" value="0"></div>
+                    <div class="form-group">
+                        <label>Tipo</label>
+                        <select class="form-control" id="evalTipo">
+                            <option value="examen" ${evaluacion?.tipo === 'examen' ? 'selected' : ''}>Examen</option>
+                            <option value="trabajo" ${evaluacion?.tipo === 'trabajo' ? 'selected' : ''}>Trabajo</option>
+                            <option value="proyecto" ${evaluacion?.tipo === 'proyecto' ? 'selected' : ''}>Proyecto</option>
+                            <option value="participacion" ${evaluacion?.tipo === 'participacion' ? 'selected' : ''}>Participación</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Ponderación (%)</label>
+                        <input class="form-control" id="evalPonderacion" type="number" min="0" max="100" value="${evaluacion?.ponderacion || 0}">
+                    </div>
                 </div>
-                <div class="form-group"><label>Fecha Aplicación</label><input class="form-control" id="evalFecha" type="date"></div>
+                <div class="form-group"><label>Fecha Aplicación</label><input class="form-control" id="evalFecha" type="date" value="${evaluacion?.fecha_aplicacion || ''}"></div>
             </form>
-        `, `<button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
-            <button class="btn btn-primary" onclick="profesorApp.saveEvaluacion()">Guardar</button>`);
+        `;
+
+        showModal(id ? 'Editar Evaluación' : 'Nueva Evaluación', content, `
+            <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="profesorApp.saveEvaluacion()">Guardar</button>
+        `);
     },
 
     async saveEvaluacion() {
@@ -685,6 +758,23 @@ const profesorApp = {
                 showToast('Evaluación eliminada', 'success');
                 this.loadEvaluaciones();
             } catch (e) { showToast(e.message || 'Error al eliminar', 'error'); }
+        });
+    },
+
+    async enviarCalificaciones(evaluacionId) {
+        showConfirm('¿Desea enviar estas calificaciones a los estudiantes y sus representantes?', async () => {
+            try {
+                showLoading();
+                await apiCall('POST', '/profesor/notas', {
+                    action: 'enviar_calificaciones',
+                    evaluacion_id: evaluacionId
+                });
+                showToast('Calificaciones enviadas exitosamente', 'success');
+            } catch (e) {
+                showToast(e.message || 'Error al enviar calificaciones', 'error');
+            } finally {
+                hideLoading();
+            }
         });
     },
 
@@ -771,51 +861,51 @@ const profesorApp = {
                 return;
             }
 
-            // Build weekly calendar grid
+            const TIME_SLOTS = [
+                {inicio:'07:00', fin:'07:40', label:'1ra'},
+                {inicio:'07:40', fin:'08:20', label:'2da'},
+                {inicio:'08:20', fin:'09:10', label:'3ra'},
+                {inicio:'09:10', fin:'09:50', label:'4ta'},
+                {inicio:'09:50', fin:'10:30', label:'5ta'},
+                {inicio:'10:30', fin:'11:10', label:'6ta'},
+                {inicio:'11:10', fin:'11:50', label:'7ma'},
+                {inicio:'11:50', fin:'12:30', label:'8va'},
+                {inicio:'12:30', fin:'12:45', label:'9na'}
+            ];
             const diaSemana = [1,2,3,4,5]; // Mon-Fri
+
+            // Build schedule map
+            const schedMap = {};
+            clases.forEach(c => {
+                const key = `${c.dia_semana}-${c.hora_inicio}`;
+                schedMap[key] = c;
+            });
+
             let html = `<h3 style="margin-bottom:1rem;">Mi Horario Semanal</h3>`;
             html += `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;min-width:700px;">`;
-            html += `<thead><tr><th style="padding:0.75rem;border:1px solid var(--gray-200);background:var(--gray-50);width:80px;">Hora</th>`;
+            html += `<thead><tr><th style="padding:0.75rem;border:1px solid var(--gray-200);background:var(--gray-50);width:90px;">Hora</th>`;
             diaSemana.forEach(d => {
                 html += `<th style="padding:0.75rem;border:1px solid var(--gray-200);background:var(--gray-50);text-align:center;">${dias[d]||''}</th>`;
             });
             html += `</tr></thead><tbody>`;
 
-            // Collect all unique time slots
-            const timeSlots = new Set();
-            clases.forEach(c => {
-                if (c.hora_inicio) timeSlots.add(c.hora_inicio);
-            });
-            const sortedSlots = Array.from(timeSlots).sort();
+            const colors = ['#e8f0fe','#e6f4ea','#fef7e0','#fce8e6','#e8eaed','#f3e8fd','#e0f7fa','#fff3e0','#f1f8e9'];
 
-            if (sortedSlots.length === 0) {
-                // Fallback: show list view
-                html = `<h3 style="margin-bottom:1rem;">Mi Horario Semanal</h3><div class="card"><div class="table-container"><table><thead><tr><th>Día</th><th>Materia</th><th>Sección</th><th>Hora</th><th>Aula</th><th>Estudiantes</th></tr></thead><tbody>`;
-                const diasOrd = [1,2,3,4,5];
-                diasOrd.forEach(dia => {
-                    const clasesDia = horarioPorDia[dia] || [];
-                    clasesDia.forEach(c => {
-                        html += `<tr><td>${dias[dia]||''}</td><td>${escapeHtml(c.materia_nombre||'-')}</td><td>${escapeHtml(c.seccion||'-')}</td><td>${formatTimeString(c.hora_inicio)} - ${formatTimeString(c.hora_fin)}</td><td>${escapeHtml(c.aula||'-')}</td><td>${c.total_estudiantes||0}</td></tr>`;
-                    });
-                });
-                html += '</tbody></table></div></div>';
-                container.innerHTML = html;
-                return;
-            }
-
-            sortedSlots.forEach(slot => {
-                html += `<tr><td style="padding:0.5rem;border:1px solid var(--gray-200);font-weight:600;font-size:0.8125rem;text-align:center;vertical-align:middle;">${formatTimeString(slot)}</td>`;
+            TIME_SLOTS.forEach((slot, idx) => {
+                html += `<tr><td style="padding:0.5rem;border:1px solid var(--gray-200);font-size:0.75rem;font-weight:600;text-align:center;vertical-align:middle;white-space:nowrap;background:var(--gray-50);">
+                    <div>${slot.inicio}</div><div style="color:var(--gray-400);font-weight:400;">${slot.fin}</div>
+                    <div style="font-size:0.625rem;color:var(--gray-400);">${slot.label}</div>
+                </td>`;
                 diaSemana.forEach(dia => {
-                    const clasesDia = horarioPorDia[dia] || [];
-                    const claseEnSlot = clasesDia.find(c => c.hora_inicio === slot);
-                    if (claseEnSlot) {
-                        const colors = ['var(--primary-light)','var(--secondary-light)','var(--warning-light)','var(--info-light)','var(--danger-light)'];
-                        const colorIdx = (claseEnSlot.materia_id || 0) % colors.length;
-                        html += `<td style="padding:0.5rem;border:1px solid var(--gray-200);background:${colors[colorIdx]};vertical-align:top;">
-                            <div style="font-weight:600;font-size:0.8125rem;">${escapeHtml(claseEnSlot.materia_nombre||'')}</div>
-                            <div style="font-size:0.75rem;color:var(--gray-600);">${formatTimeString(claseEnSlot.hora_inicio)} - ${formatTimeString(claseEnSlot.hora_fin)}</div>
-                            <div style="font-size:0.75rem;color:var(--gray-500);">Sec: ${escapeHtml(claseEnSlot.seccion||'-')} | Aula: ${escapeHtml(claseEnSlot.aula||'-')}</div>
-                            <div style="font-size:0.6875rem;color:var(--gray-400);">${claseEnSlot.total_estudiantes||0} alumnos</div>
+                    const key = `${dia}-${slot.inicio}`;
+                    const c = schedMap[key];
+                    if (c) {
+                        const bg = colors[(c.materia_id || 0) % colors.length];
+                        html += `<td style="padding:0.5rem;border:1px solid var(--gray-200);background:${bg};vertical-align:top;">
+                            <div style="font-weight:600;font-size:0.8125rem;">${escapeHtml(c.materia_nombre||'')}</div>
+                            <div style="font-size:0.75rem;color:var(--gray-600);">${formatTimeString(c.hora_inicio)} - ${formatTimeString(c.hora_fin)}</div>
+                            <div style="font-size:0.75rem;color:var(--gray-500);">Sec: ${escapeHtml(c.seccion||'-')} | Aula: ${escapeHtml(c.aula||'-')}</div>
+                            <div style="font-size:0.6875rem;color:var(--gray-400);">${c.total_estudiantes||0} alumnos</div>
                         </td>`;
                     } else {
                         html += `<td style="padding:0.5rem;border:1px solid var(--gray-200);"></td>`;
@@ -825,8 +915,21 @@ const profesorApp = {
             });
 
             html += `</tbody></table></div>`;
+
+            // Also show list view below
+            html += `<div class="card" style="margin-top:1rem;"><div class="card-header"><h3>Lista de Clases</h3></div><div class="table-container"><table><thead><tr><th>Día</th><th>Materia</th><th>Sección</th><th>Hora</th><th>Aula</th><th>Estudiantes</th></tr></thead><tbody>`;
+            const diasOrd = [1,2,3,4,5];
+            diasOrd.forEach(dia => {
+                const clasesDia = horarioPorDia[dia] || [];
+                clasesDia.forEach(c => {
+                    html += `<tr><td>${dias[dia]||''}</td><td>${escapeHtml(c.materia_nombre||'-')}</td><td>${escapeHtml(c.seccion||'-')}</td><td>${formatTimeString(c.hora_inicio)} - ${formatTimeString(c.hora_fin)}</td><td>${escapeHtml(c.aula||'-')}</td><td>${c.total_estudiantes||0}</td></tr>`;
+                });
+            });
+            html += '</tbody></table></div></div>';
+
             container.innerHTML = html;
         } catch (e) {
+            console.error('Error al cargar horario semanal:', e);
             container.innerHTML = `<p style="color:var(--danger);text-align:center;">Error al cargar horario semanal</p>`;
             showToast('Error al cargar horario semanal', 'error');
         }

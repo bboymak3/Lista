@@ -217,18 +217,69 @@ const estudianteApp = {
             const estudiante = data.estudiante || {};
 
             if (horarios.length === 0) {
-                container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📅</div><div class="empty-state-title">Sin horario asignado</div><div class="empty-state-text">Aún no tienes materias asignadas en tu horario</div></div>`;
+                container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📅</div><div class="empty-state-title">Sin horario asignado</div><div class="empty-state-text">Aún no tienes materias asignadas en tu horario. Contacta al administrador.</div></div>`;
                 return;
             }
 
-            let html = `<h3 style="margin-bottom:0.5rem;">Mi Horario Semanal</h3>
-                <p style="font-size:0.875rem;color:var(--gray-500);margin-bottom:1rem;">${escapeHtml(estudiante.grado||'')}° "${escapeHtml(estudiante.seccion||'')}" - ${escapeHtml(estudiante.turno||'')}</p>`;
+            const TIME_SLOTS = [
+                {inicio:'07:00', fin:'07:40', label:'1ra'},
+                {inicio:'07:40', fin:'08:20', label:'2da'},
+                {inicio:'08:20', fin:'09:10', label:'3ra'},
+                {inicio:'09:10', fin:'09:50', label:'4ta'},
+                {inicio:'09:50', fin:'10:30', label:'5ta'},
+                {inicio:'10:30', fin:'11:10', label:'6ta'},
+                {inicio:'11:10', fin:'11:50', label:'7ma'},
+                {inicio:'11:50', fin:'12:30', label:'8va'},
+                {inicio:'12:30', fin:'12:45', label:'9na'}
+            ];
+            const diaSemana = [1,2,3,4,5];
 
-            // Table view
-            html += `<div class="card"><div class="table-container"><table><thead><tr><th>Día</th><th>Materia</th><th>Profesor</th><th>Hora</th><th>Aula</th></tr></thead><tbody>`;
-            const diasOrd = [1,2,3,4,5];
+            // Build schedule map
+            const schedMap = {};
+            horarios.forEach(c => {
+                const key = `${c.dia_semana}-${c.hora_inicio}`;
+                schedMap[key] = c;
+            });
+
+            let html = `<h3 style="margin-bottom:0.5rem;">Mi Horario Semanal</h3>
+                <p style="font-size:0.875rem;color:var(--gray-500);margin-bottom:1rem;">${escapeHtml(estudiante.grado||'')}° "${escapeHtml(estudiante.seccion||'')}" - ${estudiante.turno === 'manana' ? 'Mañana' : estudiante.turno === 'tarde' ? 'Tarde' : escapeHtml(estudiante.turno||'')}</p>`;
+
+            // Calendar grid view with fixed time slots
+            const colors = ['#e8f0fe','#e6f4ea','#fef7e0','#fce8e6','#e8eaed','#f3e8fd','#e0f7fa','#fff3e0','#f1f8e9'];
+            html += `<div class="card"><div class="card-header"><h3>Vista Calendario</h3></div><div class="card-body" style="padding:0;"><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;min-width:600px;">`;
+            html += `<thead><tr><th style="padding:0.625rem;border:1px solid var(--gray-200);background:var(--gray-50);width:90px;text-align:center;font-size:0.8125rem;">Hora</th>`;
+            diaSemana.forEach(d => {
+                html += `<th style="padding:0.625rem;border:1px solid var(--gray-200);background:var(--gray-50);text-align:center;">${dias[d]||''}</th>`;
+            });
+            html += `</tr></thead><tbody>`;
+
+            TIME_SLOTS.forEach(slot => {
+                html += `<tr><td style="padding:0.5rem;border:1px solid var(--gray-200);font-size:0.75rem;font-weight:600;text-align:center;vertical-align:middle;white-space:nowrap;background:var(--gray-50);">
+                    <div>${slot.inicio}</div><div style="color:var(--gray-400);font-weight:400;">${slot.fin}</div>
+                    <div style="font-size:0.625rem;color:var(--gray-400);">${slot.label}</div>
+                </td>`;
+                diaSemana.forEach(dia => {
+                    const key = `${dia}-${slot.inicio}`;
+                    const c = schedMap[key];
+                    if (c) {
+                        const bg = colors[(c.materia_id || 0) % colors.length];
+                        html += `<td style="padding:0.5rem;border:1px solid var(--gray-200);background:${bg};font-size:0.75rem;vertical-align:top;">
+                            <div style="font-weight:600;">${escapeHtml(c.materia_nombre||'')}</div>
+                            <div style="color:var(--gray-500);">${escapeHtml(c.profesor_nombre||'')} ${escapeHtml(c.profesor_apellido||'')}</div>
+                            <div style="color:var(--gray-400);font-size:0.6875rem;">${escapeHtml(c.aula||'')}</div>
+                        </td>`;
+                    } else {
+                        html += `<td style="padding:0.5rem;border:1px solid var(--gray-200);"></td>`;
+                    }
+                });
+                html += `</tr>`;
+            });
+            html += `</tbody></table></div></div></div>`;
+
+            // Table list view
+            html += `<div class="card" style="margin-top:1rem;"><div class="card-header"><h3>Detalle de Clases</h3></div><div class="table-container"><table><thead><tr><th>Día</th><th>Materia</th><th>Profesor</th><th>Hora</th><th>Aula</th></tr></thead><tbody>`;
             let hasAny = false;
-            diasOrd.forEach(dia => {
+            diaSemana.forEach(dia => {
                 const clasesDia = horarioPorDia[dia] || [];
                 clasesDia.forEach(c => {
                     hasAny = true;
@@ -244,41 +295,9 @@ const estudianteApp = {
             if (!hasAny) html += '<tr><td colspan="5" class="table-empty">No hay clases de lunes a viernes</td></tr>';
             html += '</tbody></table></div></div>';
 
-            // Calendar grid view
-            const diaSemana = [1,2,3,4,5];
-            const timeSlots = new Set();
-            horarios.forEach(c => { if (c.hora_inicio) timeSlots.add(c.hora_inicio); });
-            const sortedSlots = Array.from(timeSlots).sort();
-
-            if (sortedSlots.length > 0) {
-                html += `<div class="card" style="margin-top:1rem;"><div class="card-header"><h3>Vista Calendario</h3></div><div class="card-body"><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;min-width:600px;">`;
-                html += `<thead><tr><th style="padding:0.5rem;border:1px solid var(--gray-200);background:var(--gray-50);width:70px;">Hora</th>`;
-                diaSemana.forEach(d => {
-                    html += `<th style="padding:0.5rem;border:1px solid var(--gray-200);background:var(--gray-50);text-align:center;">${dias[d]||''}</th>`;
-                });
-                html += `</tr></thead><tbody>`;
-
-                sortedSlots.forEach(slot => {
-                    html += `<tr><td style="padding:0.375rem;border:1px solid var(--gray-200);font-size:0.75rem;font-weight:600;text-align:center;">${formatTimeString(slot)}</td>`;
-                    diaSemana.forEach(dia => {
-                        const clasesDia = horarioPorDia[dia] || [];
-                        const claseEnSlot = clasesDia.find(c => c.hora_inicio === slot);
-                        if (claseEnSlot) {
-                            html += `<td style="padding:0.375rem;border:1px solid var(--gray-200);background:var(--primary-light);font-size:0.75rem;">
-                                <div style="font-weight:600;">${escapeHtml(claseEnSlot.materia_nombre||'')}</div>
-                                <div style="color:var(--gray-500);">${escapeHtml(claseEnSlot.aula||'')}</div>
-                            </td>`;
-                        } else {
-                            html += `<td style="padding:0.375rem;border:1px solid var(--gray-200);"></td>`;
-                        }
-                    });
-                    html += `</tr>`;
-                });
-                html += `</tbody></table></div></div></div>`;
-            }
-
             container.innerHTML = html;
         } catch (e) {
+            console.error('Error al cargar horario:', e);
             container.innerHTML = `<p style="color:var(--danger);text-align:center;">Error al cargar horario</p>`;
             showToast('Error al cargar horario semanal', 'error');
         }

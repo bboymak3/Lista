@@ -21,15 +21,19 @@ async function handleGet(request, env, user) {
 
     // If user is a student, find their own profile
     if (user.rol === 'estudiante') {
-      const student = await env.DB.prepare(
-        'SELECT id FROM students WHERE cedula_escolar = ?'
-      )
-        .bind(user.cedula)
-        .first();
-      if (student) {
-        targetStudentId = student.id;
+      if (user.estudiante_id) {
+        targetStudentId = user.estudiante_id;
       } else {
-        return jsonResponse({ error: 'Perfil de estudiante no encontrado' }, 404);
+        const student = await env.DB.prepare(
+          'SELECT id FROM students WHERE cedula_escolar = ?'
+        )
+          .bind(user.cedula)
+          .first();
+        if (student) {
+          targetStudentId = student.id;
+        } else {
+          return jsonResponse({ error: 'Perfil de estudiante no encontrado' }, 404);
+        }
       }
     }
 

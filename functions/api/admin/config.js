@@ -16,13 +16,29 @@ function checkAdmin(user) {
   return user && user.rol === 'admin';
 }
 
+function checkAdminOrProfesor(user) {
+  return user && (user.rol === 'admin' || user.rol === 'profesor');
+}
+
 // GET - Get school config
 async function handleGet(request, env, user) {
-  if (!checkAdmin(user)) {
-    return jsonResponse({ error: 'Acceso denegado. Se requiere rol admin.' }, 403);
+  if (!checkAdminOrProfesor(user)) {
+    return jsonResponse({ error: 'Acceso denegado. Se requiere rol admin o profesor.' }, 403);
   }
 
   try {
+    const url = new URL(request.url);
+    const action = url.searchParams.get('action');
+
+    // Profesor role can only access the public location info
+    if (user.rol === 'profesor') {
+      const config = await env.DB.prepare(
+        'SELECT latitud, longitud, radio_permitido FROM school_config ORDER BY id ASC LIMIT 1'
+      ).first();
+
+      return jsonResponse({ config });
+    }
+
     const config = await env.DB.prepare(
       'SELECT * FROM school_config ORDER BY id ASC LIMIT 1'
     ).first();

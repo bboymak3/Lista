@@ -34,14 +34,19 @@ async function handleGet(request, env, user) {
 
     // If user is a student, they can only see their own data
     if (user.rol === 'estudiante') {
-      // Look up student by user's cedula matching cedula_escolar
-      const student = await env.DB.prepare('SELECT id FROM students WHERE cedula_escolar = ?')
-        .bind(user.cedula)
-        .first();
-      if (student) {
-        targetStudentId = student.id;
+      // First check if estudiante_id is stored on the user record
+      if (user.estudiante_id) {
+        targetStudentId = user.estudiante_id;
       } else {
-        return jsonResponse({ error: 'Estudiante no encontrado para este usuario' }, 404);
+        // Fallback: Look up student by user's cedula matching cedula_escolar
+        const student = await env.DB.prepare('SELECT id FROM students WHERE cedula_escolar = ?')
+          .bind(user.cedula)
+          .first();
+        if (student) {
+          targetStudentId = student.id;
+        } else {
+          return jsonResponse({ error: 'Estudiante no encontrado para este usuario' }, 404);
+        }
       }
     }
 
@@ -159,9 +164,16 @@ async function handlePost(request, env, user) {
       }
 
       // Find the student
-      const student = await env.DB.prepare(
-        'SELECT id, codigo_unico, qr_code FROM students WHERE cedula_escolar = ? AND activo = 1'
-      ).bind(user.cedula).first();
+      let student;
+      if (user.estudiante_id) {
+        student = await env.DB.prepare(
+          'SELECT id, codigo_unico, qr_code FROM students WHERE id = ? AND activo = 1'
+        ).bind(user.estudiante_id).first();
+      } else {
+        student = await env.DB.prepare(
+          'SELECT id, codigo_unico, qr_code FROM students WHERE cedula_escolar = ? AND activo = 1'
+        ).bind(user.cedula).first();
+      }
 
       if (!student) {
         return jsonResponse({ error: 'Estudiante no encontrado' }, 404);

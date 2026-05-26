@@ -187,6 +187,64 @@ async function handlePost(request, env, user) {
       return jsonResponse({ message: `${saved.length} nota(s) guardada(s)`, saved, errors: errors.length ? errors : undefined });
     }
 
+    // Enviar calificaciones (send grade notifications to representatives)
+    if (action === 'enviar_calificaciones') {
+      const { evaluacion_id } = body;
+      if (!evaluacion_id) {
+        return jsonResponse({ error: 'evaluacion_id es requerido' }, 400);
+      }
+
+      const evaluacion = await env.DB.prepare(
+        'SELECT * FROM evaluations WHERE id = ? AND profesor_id = ? AND activo = 1'
+      ).bind(evaluacion_id, profesor_id).first();
+
+      if (!evaluacion) return jsonResponse({ error: 'Evaluación no encontrada' }, 404);
+
+      // Get all grades for this evaluation
+      const { results: grades } = await env.DB.prepare(
+        `SELECT g.estudiante_id, g.nota, s.nombre as estudiante_nombre, s.apellido as estudiante_apellido
+         FROM grades g
+         INNER JOIN students s ON g.estudiante_id = s.id AND s.activo = 1
+         WHERE g.evaluacion_id = ?`
+      ).bind(evaluacion_id).all();
+
+      if (grades.length === 0) {
+        return jsonResponse({ error: 'No hay calificaciones registradas para esta evaluación' }, 400);
+      }
+
+      // Get subject name
+      const subject = await env.DB.prepare('SELECT nombre FROM subjects WHERE id = ?').bind(evaluacion.materia_id).first();
+
+      let notificacionesEnviadas = 0;
+      for (const grade of grades) {
+        // Find representatives for this student
+        const { results: parents } = await env.DB.prepare(
+          `SELECT u.id FROM parent_student ps INNER JOIN users u ON ps.representante_id = u.id WHERE ps.estudiante_id = ? AND u.activo = 1`
+        ).bind(grade.estudiante_id).all();
+
+        for (const parent of parents) {
+          // Check if notification already sent for this evaluation
+          const existing = await env.DB.prepare(
+            `SELECT id FROM notifications WHERE representante_id = ? AND estudiante_id = ? AND tipo = 'nota' AND mensaje LIKE ?`
+          ).bind(parent.id, grade.estudiante_id, `%evaluación "${evaluacion.titulo}"%`).first();
+
+          if (!existing) {
+            await env.DB.prepare(
+              `INSERT INTO notifications (representante_id, estudiante_id, tipo, titulo, mensaje, leida, fecha_creacion) VALUES (?, ?, 'nota', ?, ?, 0, datetime('now'))`
+            ).bind(
+              parent.id,
+              grade.estudiante_id,
+              `Calificación publicada: ${evaluacion.titulo}`,
+              `Se ha publicado la calificación de ${grade.estudiante_nombre} ${grade.estudiante_apellido} en la evaluación "${evaluacion.titulo}" de ${subject?.nombre || 'Materia'}. Nota: ${grade.nota}`
+            ).run();
+            notificacionesEnviadas++;
+          }
+        }
+      }
+
+      return jsonResponse({ message: `${notificacionesEnviadas} notificación(es) enviada(s) a representantes`, notificaciones: notificacionesEnviadas });
+    }
+
     // Create evaluation
     const { materia_id, lapso_id, titulo, descripcion, tipo, ponderacion, fecha_aplicacion } = body;
     if (!materia_id || !lapso_id || !titulo) {

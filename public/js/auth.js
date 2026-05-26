@@ -36,7 +36,9 @@ document.addEventListener('DOMContentLoaded', function() {
         form.addEventListener('submit', async function(e) {
             e.preventDefault();
 
-            const cedula = document.getElementById('cedula').value.trim();
+            const cedulaPrefix = document.getElementById('cedulaPrefix')?.value || 'V-';
+            const cedulaNumber = document.getElementById('cedula').value.trim();
+            const cedula = cedulaPrefix + cedulaNumber;
             const password = document.getElementById('password').value;
 
             if (!cedula || !password) {

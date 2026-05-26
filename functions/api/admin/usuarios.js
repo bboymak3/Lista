@@ -108,9 +108,9 @@ async function handlePost(request, env, user) {
       return jsonResponse({ error: 'Cédula, contraseña, rol, nombre y apellido son requeridos' }, 400);
     }
 
-    const validRoles = ['admin', 'profesor', 'representante'];
+    const validRoles = ['admin', 'profesor', 'representante', 'estudiante'];
     if (!validRoles.includes(rol)) {
-      return jsonResponse({ error: 'Rol inválido. Debe ser: admin, profesor o representante' }, 400);
+      return jsonResponse({ error: 'Rol inválido. Debe ser: admin, profesor, representante o estudiante' }, 400);
     }
 
     // Check uniqueness

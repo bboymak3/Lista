@@ -99,6 +99,7 @@ export async function onRequest(context) {
       rol: user.rol,
       nombre: user.nombre,
       apellido: user.apellido,
+      estudiante_id: user.estudiante_id || null,
       exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24, // 24 hours
     };
 
@@ -112,6 +113,7 @@ export async function onRequest(context) {
         rol: user.rol,
         nombre: user.nombre,
         apellido: user.apellido,
+        estudiante_id: user.estudiante_id || null,
       },
     });
   } catch (error) {

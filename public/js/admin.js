@@ -923,22 +923,8 @@ const adminApp = {
         tbody.innerHTML = '<tr><td colspan="4" class="table-empty"><div class="spinner"></div> Cargando materias...</td></tr>';
 
         try {
-            const data = await apiCall('GET', `/admin/horarios?page=${page}&limit=${this.itemsPerPage}`);
-
-            // Intentar obtener materias desde horarios (agrupando por materia)
-            const horarios = data.horarios || data.schedules || [];
-            const materiasMap = {};
-            horarios.forEach(h => {
-                if (h.materia_id && !materiasMap[h.materia_id]) {
-                    materiasMap[h.materia_id] = {
-                        id: h.materia_id,
-                        nombre: h.materia_nombre || h.materia,
-                        descripcion: h.materia_descripcion || '',
-                        codigo: h.materia_codigo || ''
-                    };
-                }
-            });
-            this.materiasData = Object.values(materiasMap);
+            const data = await apiCall('GET', `/admin/materias?page=${page}&limit=${this.itemsPerPage}`);
+            this.materiasData = data.subjects || data.materias || [];
 
             if (this.materiasData.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="4" class="table-empty">No hay materias registradas</td></tr>';
@@ -948,9 +934,9 @@ const adminApp = {
 
             tbody.innerHTML = this.materiasData.map(m => `
                 <tr>
-                    <td>${m.id}</td>
                     <td><strong>${escapeHtml(m.nombre)}</strong>${m.codigo ? ` <code style="font-size:0.75rem;">${escapeHtml(m.codigo)}</code>` : ''}</td>
                     <td>${escapeHtml(m.descripcion || '-')}</td>
+                    <td>${m.total_horarios || 0} horario(s) | ${m.total_profesores || 0} prof.</td>
                     <td>
                         <div class="table-actions">
                             <button class="btn btn-outline btn-sm" onclick="adminApp.showMateriaModal(${m.id})" title="Editar">
@@ -1024,10 +1010,10 @@ const adminApp = {
 
             if (id) {
                 body.id = parseInt(id);
-                await apiCall('PUT', '/admin/horarios', body);
+                await apiCall('PUT', '/admin/materias', body);
                 showToast('Materia actualizada exitosamente', 'success');
             } else {
-                await apiCall('POST', '/admin/horarios', body);
+                await apiCall('POST', '/admin/materias', body);
                 showToast('Materia creada exitosamente', 'success');
             }
 
@@ -1045,7 +1031,7 @@ const adminApp = {
         showConfirm('¿Está seguro de que desea eliminar esta materia? Se eliminarán los horarios asociados.', async () => {
             try {
                 showLoading();
-                await apiCall('DELETE', `/admin/horarios?id=${id}`);
+                await apiCall('DELETE', `/admin/materias?id=${id}`);
                 showToast('Materia eliminada exitosamente', 'success');
                 this.loadMaterias(this.currentPages.materias);
             } catch (error) {
@@ -1147,25 +1133,31 @@ const adminApp = {
         const isEdit = id !== null;
         const horario = isEdit ? this.horariosData.find(h => h.id === id) : null;
 
-        // Cargar profesores y materias para los selects
+        // Cargar profesores, materias y secciones para los selects
         let profesores = [];
         let materias = [];
+        let secciones = [];
         try {
             const profRes = await apiCall('GET', '/admin/usuarios?rol=profesor&limit=100');
             profesores = profRes.users || [];
         } catch (e) { /* ignorar */ }
 
         try {
-            const matRes = await apiCall('GET', '/admin/horarios?limit=100');
-            const horarios = matRes.horarios || matRes.schedules || [];
-            const seen = new Set();
-            horarios.forEach(h => {
-                const key = `${h.materia_id}`;
-                if (h.materia_id && !seen.has(key)) {
-                    seen.add(key);
-                    materias.push({ id: h.materia_id, nombre: h.materia_nombre || h.materia });
+            const matRes = await apiCall('GET', '/admin/materias?limit=100');
+            materias = matRes.subjects || matRes.materias || [];
+        } catch (e) { /* ignorar */ }
+
+        try {
+            const secRes = await apiCall('GET', '/admin/estudiantes?limit=10000');
+            const estudiantes = secRes.students || [];
+            const secMap = {};
+            estudiantes.forEach(e => {
+                if (e.grado && e.seccion) {
+                    const key = `${e.grado}-${e.seccion}`;
+                    if (!secMap[key]) secMap[key] = { grado: e.grado, seccion: e.seccion };
                 }
             });
+            secciones = Object.values(secMap).sort((a,b) => a.grado - b.grado || a.seccion.localeCompare(b.seccion));
         } catch (e) { /* ignorar */ }
 
         const diasSemana = [
@@ -1197,15 +1189,22 @@ const adminApp = {
                 </div>
                 <div class="form-row">
                     <div class="form-group">
+                        <label for="horarioSeccion">Sección (Grado/Grupo)</label>
+                        <select class="form-control" id="horarioSeccion">
+                            <option value="">Sin sección asignada</option>
+                            ${secciones.map(s => {
+                                const secKey = `${s.grado}-${s.seccion}`;
+                                const selected = isEdit && horario.seccion_grado == s.grado && horario.seccion_nombre == s.seccion;
+                                return `<option value="${secKey}" ${selected ? 'selected' : ''}>${s.grado}° "${s.seccion}"</option>`;
+                            }).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
                         <label for="horarioDia">Día *</label>
                         <select class="form-control" id="horarioDia" required>
                             <option value="">Seleccione un día</option>
                             ${diasSemana.map(d => `<option value="${d.valor}" ${isEdit && horario.dia_semana == d.valor ? 'selected' : ''}>${d.nombre}</option>`).join('')}
                         </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="horarioAula">Aula</label>
-                        <input type="text" class="form-control" id="horarioAula" value="${isEdit ? escapeHtml(horario.aula || '') : ''}" placeholder="Ej: A-101">
                     </div>
                 </div>
                 <div class="form-row">
@@ -1218,9 +1217,18 @@ const adminApp = {
                         <input type="time" class="form-control" id="horarioHoraFin" value="${isEdit ? (horario.hora_fin || '') : ''}" required>
                     </div>
                 </div>
-                <div class="form-group">
-                    <label for="horarioPeriodo">Período</label>
-                    <input type="text" class="form-control" id="horarioPeriodo" value="${isEdit ? escapeHtml(horario.periodo || '') : ''}" placeholder="Ej: 2024-2025">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="horarioAula">Aula</label>
+                        <input type="text" class="form-control" id="horarioAula" value="${isEdit ? escapeHtml(horario.aula || '') : ''}" placeholder="Ej: A-101">
+                    </div>
+                    <div class="form-group">
+                        <label for="horarioPeriodo">Período</label>
+                        <input type="text" class="form-control" id="horarioPeriodo" value="${isEdit ? escapeHtml(horario.periodo_escolar || horario.periodo || '') : ''}" placeholder="Ej: 2024-2025">
+                    </div>
+                </div>
+                <div style="background:var(--info-light);padding:0.75rem;border-radius:0.375rem;font-size:0.8125rem;color:var(--info);">
+                    <strong>Nota:</strong> Al asignar una sección, los estudiantes de esa sección se agregarán automáticamente a este horario.
                 </div>
             </form>
         `;
@@ -1239,11 +1247,12 @@ const adminApp = {
         const id = document.getElementById('horarioId')?.value;
         const materia_id = document.getElementById('horarioMateria')?.value;
         const profesor_id = document.getElementById('horarioProfesor')?.value;
+        const seccionRaw = document.getElementById('horarioSeccion')?.value;
         const dia_semana = document.getElementById('horarioDia')?.value;
         const hora_inicio = document.getElementById('horarioHoraInicio')?.value;
         const hora_fin = document.getElementById('horarioHoraFin')?.value;
         const aula = document.getElementById('horarioAula')?.value.trim();
-        const periodo = document.getElementById('horarioPeriodo')?.value.trim();
+        const periodo_escolar = document.getElementById('horarioPeriodo')?.value.trim();
 
         if (!materia_id || !profesor_id || !dia_semana || !hora_inicio || !hora_fin) {
             showToast('Por favor complete todos los campos requeridos', 'warning');
@@ -1252,11 +1261,34 @@ const adminApp = {
 
         try {
             showLoading();
+            // Look up section id from grado-seccion if selected
+            let seccion_id = null;
+            if (seccionRaw) {
+                try {
+                    const secRes = await apiCall('GET', '/admin/estudiantes?limit=10000');
+                    const estudiantes = secRes.students || [];
+                    const secMatch = seccionRaw.match(/^(\d+)-(.+)$/);
+                    if (secMatch) {
+                        const grado = secMatch[1];
+                        const seccion = secMatch[2];
+                        // Find or create section in the sections table
+                        const existingSections = await apiCall('GET', '/admin/estudiantes?limit=10000');
+                        // Try to find the section by grado and nombre
+                        const { results: sections } = await (async () => {
+                            // Use the DB directly - but we don't have access, so we'll pass the grado/seccion
+                            return { results: [] };
+                        })();
+                    }
+                } catch(e) { /* ignore */ }
+            }
+
             const body = {
                 materia_id: parseInt(materia_id),
                 profesor_id: parseInt(profesor_id),
+                seccion_grado: seccionRaw ? seccionRaw.split('-')[0] : null,
+                seccion_nombre: seccionRaw ? seccionRaw.split('-')[1] : null,
                 dia_semana: parseInt(dia_semana),
-                hora_inicio, hora_fin, aula, periodo
+                hora_inicio, hora_fin, aula, periodo_escolar
             };
 
             if (id) {

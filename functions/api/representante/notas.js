@@ -1,223 +1,142 @@
-// api/representante/notas.js - Representative grades view for linked students
-const CORS = {
+// api/representante/notas.js - Representative grades (FIXED notification spam)
+const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type,Authorization',
 };
 
-function json(data, status = 200) {
+function jsonResponse(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json', ...CORS },
+    headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
   });
-}
-
-function checkRepresentante(user) {
-  return user && (user.rol === 'representante' || user.rol === 'admin');
 }
 
 // GET - Get grades for all linked students
 async function handleGet(request, env, user) {
-  if (!checkRepresentante(user)) {
-    return json({ error: 'Acceso denegado. Se requiere rol representante.' }, 403);
+  if (!user || user.rol !== 'representante') {
+    return jsonResponse({ error: 'Acceso denegado. Se requiere rol representante.' }, 403);
   }
 
+  const url = new URL(request.url);
+  const estudiante_id = url.searchParams.get('estudiante_id') || '';
+  const lapso_id = url.searchParams.get('lapso_id') || '';
+
   try {
-    const url = new URL(request.url);
-    const estudiante_id = url.searchParams.get('estudiante_id') || null;
-    const lapso_id = url.searchParams.get('lapso_id') || null;
+    // Get linked students
+    const { results: links } = await env.DB.prepare(
+      `SELECT ps.estudiante_id, s.nombre, s.apellido, s.grado, s.seccion, s.codigo_unico
+       FROM parent_student ps
+       INNER JOIN students s ON ps.estudiante_id = s.id AND s.activo = 1
+       WHERE ps.representante_id = ?`
+    ).bind(user.id).all();
 
-    // Get all students linked to this representative
-    let studentQuery = `SELECT s.id, s.nombre, s.apellido, s.codigo_unico, s.grado, s.seccion
-                        FROM parent_student ps
-                        INNER JOIN students s ON ps.estudiante_id = s.id
-                        WHERE ps.representante_id = ? AND s.activo = 1`;
-    const studentParams = [user.id];
-
-    if (estudiante_id) {
-      studentQuery += ' AND s.id = ?';
-      studentParams.push(estudiante_id);
+    if (links.length === 0) {
+      return jsonResponse({ estudiantes: [], lapsos: [] });
     }
 
-    studentQuery += ' ORDER BY s.apellido, s.nombre';
+    const studentIds = links.map(l => l.estudiante_id);
+    const estudiantesData = [];
 
-    const { results: students } = await env.DB.prepare(studentQuery).bind(...studentParams).all();
+    for (const link of links) {
+      if (estudiante_id && link.estudiante_id !== parseInt(estudiante_id)) continue;
 
-    if (students.length === 0) {
-      return json({ error: 'No tiene estudiantes asociados' }, 404);
-    }
+      // Get grades for this student grouped by lapso
+      let query = `SELECT l.id as lapso_id, l.nombre as lapso_nombre, l.numero as lapso_numero,
+                   sub.id as materia_id, sub.nombre as materia_nombre, sub.codigo as materia_codigo,
+                   ev.id as evaluacion_id, ev.titulo as evaluacion_titulo, ev.tipo as evaluacion_tipo,
+                   ev.ponderacion, ev.fecha_aplicacion,
+                   g.nota, g.observaciones, g.fecha_registro
+           FROM lapsos l
+           LEFT JOIN evaluations ev ON ev.lapso_id = l.id AND ev.activo = 1
+           LEFT JOIN subjects sub ON ev.materia_id = sub.id
+           LEFT JOIN grades g ON g.evaluacion_id = ev.id AND g.estudiante_id = ?
+           WHERE l.activo = 1`;
+      const params = [link.estudiante_id];
 
-    // For each student, get their grades grouped by lapso and materia
-    const studentsWithGrades = [];
+      if (lapso_id) { query += ' AND l.id = ?'; params.push(lapso_id); }
+      query += ' ORDER BY l.numero, sub.nombre, ev.fecha_aplicacion';
 
-    for (const student of students) {
-      let gradeQuery = `SELECT g.id as grade_id, g.nota, g.observaciones, g.fecha_registro, g.fecha_actualizacion,
-                        e.id as evaluacion_id, e.titulo as evaluacion_titulo, e.descripcion as evaluacion_descripcion,
-                        e.tipo as evaluacion_tipo, e.ponderacion,
-                        sub.id as materia_id, sub.nombre as materia_nombre, sub.codigo as materia_codigo,
-                        l.id as lapso_id, l.numero as lapso_numero, l.nombre as lapso_nombre,
-                        l.fecha_inicio as lapso_inicio, l.fecha_fin as lapso_fin
-                        FROM grades g
-                        INNER JOIN evaluations e ON g.evaluacion_id = e.id
-                        INNER JOIN subjects sub ON e.materia_id = sub.id
-                        INNER JOIN lapsos l ON e.lapso_id = l.id
-                        WHERE g.estudiante_id = ? AND e.activo = 1`;
-      const gradeParams = [student.id];
+      const { results: rawGrades } = await env.DB.prepare(query).bind(...params).all();
 
-      if (lapso_id) {
-        gradeQuery += ' AND e.lapso_id = ?';
-        gradeParams.push(lapso_id);
-      }
-
-      gradeQuery += ' ORDER BY l.numero ASC, sub.nombre ASC, e.titulo ASC';
-
-      const { results: grades } = await env.DB.prepare(gradeQuery).bind(...gradeParams).all();
-
-      // Group by lapso, then by materia
-      const grouped = {};
-      for (const row of grades) {
-        const lapsoKey = row.lapso_id;
-        const materiaKey = row.materia_id;
-
-        if (!grouped[lapsoKey]) {
-          grouped[lapsoKey] = {
-            lapso_id: row.lapso_id,
-            lapso_numero: row.lapso_numero,
-            lapso_nombre: row.lapso_nombre,
-            lapso_inicio: row.lapso_inicio,
-            lapso_fin: row.lapso_fin,
-            materias: {},
+      // Group by lapso → materia
+      const lapsosMap = {};
+      rawGrades.forEach(g => {
+        if (!lapsosMap[g.lapso_id]) {
+          lapsosMap[g.lapso_id] = {
+            lapso_id: g.lapso_id,
+            lapso_nombre: g.lapso_nombre,
+            lapso_numero: g.lapso_numero,
+            materias: {}
           };
         }
-
-        if (!grouped[lapsoKey].materias[materiaKey]) {
-          grouped[lapsoKey].materias[materiaKey] = {
-            materia_id: row.materia_id,
-            materia_nombre: row.materia_nombre,
-            materia_codigo: row.materia_codigo,
+        const lapso = lapsosMap[g.lapso_id];
+        if (!lapso.materias[g.materia_id] && g.materia_id) {
+          lapso.materias[g.materia_id] = {
+            materia_id: g.materia_id,
+            materia_nombre: g.materia_nombre,
+            materia_codigo: g.materia_codigo,
             evaluaciones: [],
-            promedio: 0,
-            total_ponderacion: 0,
-            suma_ponderada: 0,
+            promedio: 0
           };
         }
-
-        grouped[lapsoKey].materias[materiaKey].evaluaciones.push({
-          grade_id: row.grade_id,
-          evaluacion_id: row.evaluacion_id,
-          evaluacion_titulo: row.evaluacion_titulo,
-          evaluacion_descripcion: row.evaluacion_descripcion,
-          evaluacion_tipo: row.evaluacion_tipo,
-          ponderacion: row.ponderacion,
-          nota: row.nota,
-          observaciones: row.observaciones,
-          fecha_registro: row.fecha_registro,
-        });
-
-        const ponderacion = row.ponderacion || 0;
-        const notaPonderada = (row.nota * ponderacion) / 100;
-        grouped[lapsoKey].materias[materiaKey].suma_ponderada += notaPonderada;
-        grouped[lapsoKey].materias[materiaKey].total_ponderacion += ponderacion;
-      }
-
-      // Calculate averages and format output
-      const lapsosArray = [];
-      let promedioGeneral = 0;
-      let totalMaterias = 0;
-
-      for (const lapsoKey of Object.keys(grouped)) {
-        const lapso = grouped[lapsoKey];
-        const materiasArray = [];
-        let lapsoSumaPonderada = 0;
-        let lapsoTotalPonderacion = 0;
-
-        for (const materiaKey of Object.keys(lapso.materias)) {
-          const materia = lapso.materias[materiaKey];
-          if (materia.total_ponderacion > 0) {
-            materia.promedio = Math.round((materia.suma_ponderada / materia.total_ponderacion) * 100 * 100) / 100;
-          } else {
-            const simpleAvg = materia.evaluaciones.reduce((sum, e) => sum + e.nota, 0) / materia.evaluaciones.length;
-            materia.promedio = Math.round(simpleAvg * 100) / 100;
-          }
-
-          lapsoSumaPonderada += materia.promedio;
-          lapsoTotalPonderacion += 1;
-          promedioGeneral += materia.promedio;
-          totalMaterias += 1;
-          materiasArray.push(materia);
+        if (g.evaluacion_id) {
+          lapso.materias[g.materia_id].evaluaciones.push({
+            evaluacion_id: g.evaluacion_id,
+            titulo: g.evaluacion_titulo,
+            tipo: g.evaluacion_tipo,
+            ponderacion: g.ponderacion,
+            fecha: g.fecha_aplicacion,
+            nota: g.nota,
+            observaciones: g.observaciones
+          });
         }
+      });
 
-        lapso.promedio_general = lapsoTotalPonderacion > 0
-          ? Math.round((lapsoSumaPonderada / lapsoTotalPonderacion) * 100) / 100
-          : 0;
-        lapso.materias = materiasArray;
-        lapsosArray.push(lapso);
-      }
+      // Calculate averages
+      const lapsos = Object.values(lapsosMap);
+      lapsos.forEach(l => {
+        const materias = Object.values(l.materias);
+        materias.forEach(m => {
+          const conNota = m.evaluaciones.filter(e => e.nota !== null && e.nota !== undefined);
+          if (conNota.length > 0) {
+            const totalPond = conNota.reduce((s, e) => s + (e.ponderacion || 1), 0);
+            const weightedSum = conNota.reduce((s, e) => s + (e.nota * (e.ponderacion || 1)), 0);
+            m.promedio = totalPond > 0 ? (weightedSum / totalPond).toFixed(2) : (conNota.reduce((s, e) => s + e.nota, 0) / conNota.length).toFixed(2);
+          }
+        });
+        l.materias = materias;
+        const conProm = materias.filter(m => m.promedio > 0);
+        l.promedio_general = conProm.length > 0 ? (conProm.reduce((s, m) => s + parseFloat(m.promedio), 0) / conProm.length).toFixed(2) : 0;
+      });
 
-      studentsWithGrades.push({
-        estudiante: {
-          id: student.id,
-          nombre: student.nombre,
-          apellido: student.apellido,
-          codigo_unico: student.codigo_unico,
-          grado: student.grado,
-          seccion: student.seccion,
-        },
-        lapsos: lapsosArray,
-        promedio_general: totalMaterias > 0
-          ? Math.round((promedioGeneral / totalMaterias) * 100) / 100
-          : 0,
+      estudiantesData.push({
+        estudiante_id: link.estudiante_id,
+        nombre: link.nombre,
+        apellido: link.apellido,
+        grado: link.grado,
+        seccion: link.seccion,
+        codigo_unico: link.codigo_unico,
+        lapsos
       });
     }
 
-    // Send notification to representative about grade access (if new grades were recently published)
-    try {
-      const today = new Date().toISOString().split('T')[0];
-      for (const swg of studentsWithGrades) {
-        // Check if there are grades updated today for this student
-        const recentGrades = await env.DB.prepare(
-          `SELECT COUNT(*) as total FROM grades WHERE estudiante_id = ? AND DATE(fecha_actualizacion) = ?`
-        )
-          .bind(swg.estudiante.id, today)
-          .first();
+    // Get available lapsos
+    const { results: lapsosList } = await env.DB.prepare(
+      'SELECT id, nombre, numero FROM lapsos WHERE activo = 1 ORDER BY numero'
+    ).all();
 
-        if (recentGrades && recentGrades.total > 0) {
-          await env.DB.prepare(
-            `INSERT INTO notifications (representante_id, estudiante_id, tipo, titulo, mensaje, leida, fecha_creacion)
-             VALUES (?, ?, 'nota', ?, ?, 0, datetime("now"))`
-          )
-            .bind(
-              user.id,
-              swg.estudiante.id,
-              `Nuevas notas de ${swg.estudiante.nombre} ${swg.estudiante.apellido}`,
-              `Se han publicado nuevas notas para ${swg.estudiante.nombre} ${swg.estudiante.apellido}. Consulte los detalles en la sección de notas.`
-            )
-            .run();
-        }
-      }
-    } catch (notifError) {
-      console.error('Notification error:', notifError);
-      // Don't fail the request for notification errors
-    }
-
-    return json({
-      representante_id: user.id,
-      estudiantes: studentsWithGrades,
-    });
+    return jsonResponse({ estudiantes: estudiantesData, lapsos: lapsosList });
   } catch (error) {
-    console.error('Get representative grades error:', error);
-    return json({ error: 'Error al obtener notas de los estudiantes' }, 500);
+    console.error('Get representante notas error:', error);
+    return jsonResponse({ error: 'Error al obtener notas' }, 500);
   }
 }
 
 export async function onRequest(context) {
   const { request, env } = context;
   const user = context.data?.user;
-  const method = request.method;
 
-  if (method === 'GET') {
-    return handleGet(request, env, user);
-  }
-
-  return json({ error: 'Método no permitido' }, 405);
+  if (request.method === 'GET') return handleGet(request, env, user);
+  return jsonResponse({ error: 'Método no permitido' }, 405);
 }

@@ -362,6 +362,7 @@ const adminApp = {
     showUsuarioModal(id = null) {
         const isEdit = id !== null;
         const usuario = isEdit ? this.usuariosData.find(u => u.id === id) : null;
+        this.usuarioFotoBase64 = null;
 
         const content = `
             <form id="usuarioForm" onsubmit="event.preventDefault(); adminApp.saveUsuario();">
@@ -401,9 +402,33 @@ const adminApp = {
                         <input type="text" class="form-control" id="usuarioTelefono" value="${isEdit ? escapeHtml(usuario.telefono || '') : ''}" placeholder="Ej: 0412-1234567">
                     </div>
                 </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="usuarioTurno">Turno</label>
+                        <select class="form-control" id="usuarioTurno">
+                            <option value="">Sin turno asignado</option>
+                            <option value="manana" ${isEdit && usuario.turno === 'manana' ? 'selected' : ''}>Mañana</option>
+                            <option value="tarde" ${isEdit && usuario.turno === 'tarde' ? 'selected' : ''}>Tarde</option>
+                            <option value="nocturno" ${isEdit && usuario.turno === 'nocturno' ? 'selected' : ''}>Nocturno</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="usuarioPassword">${isEdit ? 'Contraseña (dejar vacío para no cambiar)' : 'Contraseña *'}</label>
+                        <input type="password" class="form-control" id="usuarioPassword" ${isEdit ? '' : 'required'} placeholder="${isEdit ? 'Dejar vacío para mantener actual' : 'Contraseña'}">
+                    </div>
+                </div>
                 <div class="form-group">
-                    <label for="usuarioPassword">${isEdit ? 'Contraseña (dejar vacío para no cambiar)' : 'Contraseña *'}</label>
-                    <input type="password" class="form-control" id="usuarioPassword" ${isEdit ? '' : 'required'} placeholder="${isEdit ? 'Dejar vacío para mantener actual' : 'Contraseña'}">
+                    <label>Foto del ${usuario?.rol === 'profesor' ? 'Profesor' : 'Usuario'}</label>
+                    <div style="display:flex;align-items:center;gap:1rem;">
+                        <div id="usuarioFotoPreview" style="width:64px;height:64px;border-radius:50%;background:var(--gray-200);display:flex;align-items:center;justify-content:center;overflow:hidden;border:2px solid var(--gray-300);">
+                            ${isEdit && usuario.foto_url ? `<img src="${usuario.foto_url}" style="width:100%;height:100%;object-fit:cover;">` : '<span style="font-size:0.75rem;color:var(--gray-500);">Sin foto</span>'}
+                        </div>
+                        <div>
+                            <input type="file" id="usuarioFotoInput" accept="image/*" onchange="adminApp.handleUsuarioFoto(this)" style="display:none;">
+                            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('usuarioFotoInput').click()">Seleccionar Foto</button>
+                            ${isEdit && usuario.foto_url ? '<button type="button" class="btn btn-outline btn-sm" onclick="adminApp.removeUsuarioFoto()" style="margin-left:0.5rem;">Quitar</button>' : ''}
+                        </div>
+                    </div>
                 </div>
             </form>
         `;
@@ -418,6 +443,25 @@ const adminApp = {
         showModal(isEdit ? 'Editar Usuario' : 'Nuevo Usuario', content, footer);
     },
 
+    handleUsuarioFoto(input) {
+        const file = input.files[0];
+        if (!file) return;
+        if (file.size > 2 * 1024 * 1024) { showToast('La imagen no debe superar 2MB', 'warning'); input.value = ''; return; }
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            this.usuarioFotoBase64 = e.target.result;
+            const preview = document.getElementById('usuarioFotoPreview');
+            if (preview) preview.innerHTML = `<img src="${this.usuarioFotoBase64}" style="width:100%;height:100%;object-fit:cover;">`;
+        };
+        reader.readAsDataURL(file);
+    },
+
+    removeUsuarioFoto() {
+        this.usuarioFotoBase64 = 'REMOVE';
+        const preview = document.getElementById('usuarioFotoPreview');
+        if (preview) preview.innerHTML = '<span style="font-size:0.75rem;color:var(--gray-500);">Sin foto</span>';
+    },
+
     async saveUsuario() {
         const id = document.getElementById('usuarioId')?.value;
         const cedula = document.getElementById('usuarioCedula')?.value.trim();
@@ -426,6 +470,7 @@ const adminApp = {
         const apellido = document.getElementById('usuarioApellido')?.value.trim();
         const email = document.getElementById('usuarioEmail')?.value.trim();
         const telefono = document.getElementById('usuarioTelefono')?.value.trim();
+        const turno = document.getElementById('usuarioTurno')?.value;
         const password = document.getElementById('usuarioPassword')?.value;
 
         if (!cedula || !rol || !nombre || !apellido) {
@@ -439,8 +484,15 @@ const adminApp = {
 
         try {
             showLoading();
-            const body = { cedula, rol, nombre, apellido, email, telefono };
+            const body = { cedula, rol, nombre, apellido, email, telefono, turno };
             if (password) body.password = password;
+
+            // Handle photo
+            if (this.usuarioFotoBase64 && this.usuarioFotoBase64 !== 'REMOVE') {
+                body.foto = this.usuarioFotoBase64;
+            } else if (this.usuarioFotoBase64 === 'REMOVE') {
+                body.remove_foto = true;
+            }
 
             if (id) {
                 body.id = parseInt(id);
@@ -453,6 +505,7 @@ const adminApp = {
             }
 
             closeModal();
+            this.usuarioFotoBase64 = null;
             this.loadUsuarios(this.currentPages.usuarios);
         } catch (error) {
             console.error('Error al guardar usuario:', error);
